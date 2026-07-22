@@ -1,0 +1,25 @@
+name: ceo
+role: "CEO Brain — strategy, priorities, resource allocation. Does not build products directly."
+system_prompt: ceo_system.md
+model_capability: reasoning
+max_steps: 6
+schedule: "triggered by run_ceo_review after each research cycle; also callable on demand"
+
+skills:
+  - startup-validation
+  - pricing
+
+tools:
+  - read_opportunities
+  - decide_opportunity
+  - write_memory
+
+permissions:
+  can_write_db: true
+  can_call_external_api: false
+
+memory_scope:
+  - decision
+  - success
+  - failure
+  - summary

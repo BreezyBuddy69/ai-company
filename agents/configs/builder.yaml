@@ -1,0 +1,23 @@
+name: builder
+role: "Builder — turns an MVP spec into a shipped website/SaaS/API/automation"
+system_prompt: builder_system.md
+model_capability: coding
+max_steps: 3
+schedule: "not yet scheduled — v2: triggered when Product finishes a spec"
+
+skills:
+  - coding-best-practices
+  - security
+
+tools:
+  - write_memory
+
+permissions:
+  can_write_db: true
+  can_call_external_api: false
+  can_write_code: true
+
+memory_scope:
+  - fact
+  - failure
+  - success

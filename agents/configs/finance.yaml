@@ -1,0 +1,21 @@
+name: finance
+role: "Finance — tracks revenue, costs, profit, CAC, LTV; guards against uncontrolled spending"
+system_prompt: finance_system.md
+model_capability: general
+max_steps: 3
+schedule: "not yet scheduled — v2: triggered on a daily finance-review cadence"
+
+skills:
+  - pricing
+
+tools:
+  - write_memory
+
+permissions:
+  can_write_db: true
+  can_call_external_api: false
+  can_approve_spend: false
+
+memory_scope:
+  - fact
+  - decision

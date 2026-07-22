@@ -1,0 +1,92 @@
+# Free-first AI model routing registry.
+#
+# The model_router (backend/app/core/model_router.py) tries entries strictly in
+# ascending `priority` order. Any failure — HTTP error, rate limit, timeout,
+# "model not found" — is treated the same way: log it and fall through to the
+# next entry. This means exact OpenRouter slugs going stale (models get
+# renamed/retired often) degrades gracefully instead of breaking the system.
+#
+# This file is the single source of truth for routing. Editing it never
+# requires a code change or redeploy of application logic — only a container
+# restart to reload it (or hit POST /api/models/reload once that's wired up).
+#
+# Verify current free-tier slugs against https://openrouter.ai/models?max_price=0
+# before relying on a specific one long-term — they change over time.
+
+router:
+  # Absolute ceiling: the router will NEVER select a model whose prompt or
+  # completion price per token is above this, regardless of what's in the
+  # list below. Keeps the "free-first" promise enforced in code, not just by
+  # convention.
+  max_cost_per_1k_tokens_usd: 0.0
+  request_timeout_seconds: 60
+  max_retries_per_model: 2
+  # After this many consecutive failures within the cooldown window, a model
+  # is skipped for the rest of the window instead of retried every call.
+  failure_cooldown_seconds: 300
+  consecutive_failures_before_cooldown: 3
+
+models:
+  - name: "openrouter/auto"
+    provider: openrouter
+    display_name: "OpenRouter Auto Router (free)"
+    cost: 0
+    capability: general
+    priority: 1
+    notes: "Lets OpenRouter pick a free-eligible backing model automatically."
+
+  - name: "deepseek/deepseek-chat-v3.1:free"
+    provider: openrouter
+    display_name: "DeepSeek V3 (free)"
+    cost: 0
+    capability: general
+    priority: 2
+
+  - name: "deepseek/deepseek-r1:free"
+    provider: openrouter
+    display_name: "DeepSeek R1 (free, reasoning)"
+    cost: 0
+    capability: reasoning
+    priority: 3
+
+  - name: "qwen/qwen-2.5-coder-32b-instruct:free"
+    provider: openrouter
+    display_name: "Qwen 2.5 Coder 32B (free)"
+    cost: 0
+    capability: coding
+    priority: 4
+
+  - name: "thudm/glm-4-32b:free"
+    provider: openrouter
+    display_name: "GLM-4 32B / Air (free)"
+    cost: 0
+    capability: general
+    priority: 5
+
+  - name: "moonshotai/kimi-k2:free"
+    provider: openrouter
+    display_name: "Kimi K2 (free)"
+    cost: 0
+    capability: general
+    priority: 6
+
+  - name: "meta-llama/llama-3.3-70b-instruct:free"
+    provider: openrouter
+    display_name: "Llama 3.3 70B (free)"
+    cost: 0
+    capability: general
+    priority: 7
+
+  - name: "google/gemini-2.0-flash-exp:free"
+    provider: openrouter
+    display_name: "Gemini 2.0 Flash Experimental (free)"
+    cost: 0
+    capability: general
+    priority: 8
+
+# Local, zero-cost embedding model (not routed through OpenRouter — runs
+# on-box via sentence-transformers). Used by core/memory.py for pgvector.
+embedding:
+  provider: local
+  model_name: "sentence-transformers/all-MiniLM-L6-v2"
+  dimensions: 384

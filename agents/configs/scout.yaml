@@ -1,0 +1,25 @@
+name: scout
+role: "Scout — finds real opportunities from public discussion and issue trackers"
+system_prompt: scout_system.md
+model_capability: general
+max_steps: 4
+schedule: "every 6 hours via Celery Beat (run_scout_cycle)"
+
+skills:
+  - product-research
+  - startup-validation
+
+tools:
+  - search_hackernews
+  - search_github_issues
+  - create_opportunity
+  - write_memory
+
+permissions:
+  can_write_db: true
+  can_call_external_api: true
+
+memory_scope:
+  - fact
+  - success
+  - failure

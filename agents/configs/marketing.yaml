@@ -1,0 +1,20 @@
+name: marketing
+role: "Marketing — SEO strategy, landing pages, content, acquisition experiments"
+system_prompt: marketing_system.md
+model_capability: general
+max_steps: 3
+schedule: "not yet scheduled — v2: triggered after a product launches"
+
+skills:
+  - seo
+
+tools:
+  - write_memory
+
+permissions:
+  can_write_db: true
+  can_call_external_api: false
+
+memory_scope:
+  - fact
+  - experiment

@@ -1,0 +1,204 @@
+# Resource-conscious stack for the shared Hostinger VPS (halovisionai.cloud).
+# Total mem_limit budget across all services stays under ~2GB — no
+# Prometheus/Grafana in v1 (see ARCHITECTURE.md "Deliberately not in v1");
+# health + structured logs cover monitoring for now.
+#
+# Hosting pattern matches the rest of this repo's sites (seelenhafen, halo4,
+# hydron-one, school-ai-2/LG KI, ...): shared Traefik reverse proxy on the
+# external `traefik-proxy` network, TLS via the `letsencrypt` certresolver.
+# Public services ALSO publish an "exotic" host port as a direct-access
+# fallback that needs no DNS/Traefik — same convention LG KI uses (47821).
+# Ports in use elsewhere on this VPS: 8082 (h4h), 47821 (LG KI). This stack
+# claims the 4783x block so it can never collide:
+#   47831 -> dashboard   (https://factory.halovisionai.cloud)
+#   47832 -> backend API (https://factory-api.halovisionai.cloud)
+#   47833 -> n8n          (https://factory-n8n.halovisionai.cloud)
+# Postgres/Redis/Celery are internal-only — no host port, no Traefik label,
+# on purpose: nothing external should ever reach them directly.
+#
+# Requires the `traefik-proxy` network to already exist on the VPS (it does
+# — every other site in this repo attaches to it). If it genuinely doesn't:
+# `docker network create traefik-proxy`.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: factory-postgres
+    restart: unless-stopped
+    networks:
+      - internal
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-factory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-factory}
+      POSTGRES_DB: ${POSTGRES_DB:-factory}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-factory}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+
+  redis:
+    image: redis:7-alpine
+    container_name: factory-redis
+    restart: unless-stopped
+    networks:
+      - internal
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 96m
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: factory-backend
+    restart: unless-stopped
+    networks:
+      - internal
+      - traefik-proxy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      # Exotic direct-access fallback — bypasses Traefik/DNS entirely:
+      # http://<VPS-IP>:47832
+      - "47832:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 384m
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.routers.factory-api.rule=Host(`factory-api.halovisionai.cloud`)
+      - traefik.http.routers.factory-api.entrypoints=websecure
+      - traefik.http.routers.factory-api.tls=true
+      - traefik.http.routers.factory-api.tls.certresolver=letsencrypt
+      - traefik.http.services.factory-api.loadbalancer.server.port=8000
+      # No auth exists on this API (see ARCHITECTURE.md / DEPLOY.md) — until
+      # it does, uncomment this to require a login at the edge. Generate the
+      # hash with: echo $(htpasswd -nB admin) | sed -e 's/\$/\$\$/g'
+      # - traefik.http.middlewares.factory-api-auth.basicauth.users=admin:$$2y$$...
+      # - traefik.http.routers.factory-api.middlewares=factory-api-auth
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: factory-celery-worker
+    restart: unless-stopped
+    networks:
+      - internal
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 384m
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: factory-celery-beat
+    restart: unless-stopped
+    networks:
+      - internal
+    command: ["celery", "-A", "app.celery_app", "beat", "--loglevel=INFO"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 128m
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        # Must be the URL your BROWSER can reach — not the in-network
+        # "backend" hostname. Defaults to the public Traefik URL; override
+        # in .env if you're only using the direct port fallback.
+        NEXT_PUBLIC_API_URL: ${DASHBOARD_PUBLIC_API_URL:-https://factory-api.halovisionai.cloud}
+    container_name: factory-dashboard
+    restart: unless-stopped
+    networks:
+      - traefik-proxy
+    ports:
+      - "47831:3000"
+    depends_on:
+      - backend
+    mem_limit: 256m
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.routers.factory-dashboard.rule=Host(`factory.halovisionai.cloud`)
+      - traefik.http.routers.factory-dashboard.entrypoints=websecure
+      - traefik.http.routers.factory-dashboard.tls=true
+      - traefik.http.routers.factory-dashboard.tls.certresolver=letsencrypt
+      - traefik.http.services.factory-dashboard.loadbalancer.server.port=3000
+      # Same as the API — this is a private ops dashboard, uncomment once
+      # you've generated a hash (see backend service above):
+      # - traefik.http.middlewares.factory-dashboard-auth.basicauth.users=admin:$$2y$$...
+      # - traefik.http.routers.factory-dashboard.middlewares=factory-dashboard-auth
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: factory-n8n
+    restart: unless-stopped
+    networks:
+      - internal
+      - traefik-proxy
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-changeme}
+      N8N_HOST: ${N8N_HOST:-factory-n8n.halovisionai.cloud}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-https}
+      GENERIC_TIMEZONE: ${TZ:-UTC}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      - "47833:5678"
+    mem_limit: 256m
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.routers.factory-n8n.rule=Host(`factory-n8n.halovisionai.cloud`)
+      - traefik.http.routers.factory-n8n.entrypoints=websecure
+      - traefik.http.routers.factory-n8n.tls=true
+      - traefik.http.routers.factory-n8n.tls.certresolver=letsencrypt
+      - traefik.http.services.factory-n8n.loadbalancer.server.port=5678
+      # Separate instance from the existing n8n.halovisionai.cloud (that one
+      # is Sable2's — see Sable2/ONLINE-SETUP.md). This n8n is dedicated to
+      # ai-company automations and has its own data volume (n8n_data below).
+
+networks:
+  internal:
+    driver: bridge
+  traefik-proxy:
+    external: true
+
+volumes:
+  postgres_data:
+  n8n_data:

@@ -1,0 +1,22 @@
+name: product
+role: "Product — turns an approved opportunity into an MVP spec, roadmap, and pricing plan"
+system_prompt: product_system.md
+model_capability: general
+max_steps: 3
+schedule: "not yet scheduled — v2: triggered when an opportunity is decided 'approved'"
+
+skills:
+  - startup-validation
+  - pricing
+
+tools:
+  - read_opportunities
+  - write_memory
+
+permissions:
+  can_write_db: true
+  can_call_external_api: false
+
+memory_scope:
+  - decision
+  - fact

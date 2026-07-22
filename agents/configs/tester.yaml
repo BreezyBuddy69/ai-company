@@ -1,0 +1,21 @@
+name: tester
+role: "Tester — checks bugs, security, usability, deployment readiness, performance"
+system_prompt: tester_system.md
+model_capability: coding
+max_steps: 3
+schedule: "not yet scheduled — v2: triggered when Builder finishes a product iteration"
+
+skills:
+  - security
+  - debugging
+
+tools:
+  - write_memory
+
+permissions:
+  can_write_db: true
+  can_call_external_api: false
+
+memory_scope:
+  - failure
+  - success

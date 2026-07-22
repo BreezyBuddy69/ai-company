@@ -1,0 +1,28 @@
+name: research
+role: "Research — validates and ranks opportunities the Scout found"
+system_prompt: research_system.md
+model_capability: reasoning
+max_steps: 4
+schedule: "triggered by run_research_cycle after each scout cycle"
+
+skills:
+  - product-research
+  - pricing
+  - startup-validation
+
+tools:
+  - read_opportunities
+  - search_hackernews
+  - search_github_issues
+  - score_opportunity
+  - write_memory
+
+permissions:
+  can_write_db: true
+  can_call_external_api: true
+
+memory_scope:
+  - fact
+  - decision
+  - success
+  - failure
