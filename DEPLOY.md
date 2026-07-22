@@ -47,39 +47,38 @@ docker compose ps        # everything "healthy"/"running" within ~60s
 ```
 
 Reachable at:
-- Dashboard: `https://factory.halovisionai.cloud` (or `http://<VPS-IP>:47831` direct)
-- Backend API: `https://factory-api.halovisionai.cloud` (or `http://<VPS-IP>:47832` direct)
-- n8n: `https://factory-n8n.halovisionai.cloud` (or `http://<VPS-IP>:47833` direct)
+- Dashboard: `https://factory.halovisionai.cloud` (login: `admin` / see below)
+- Backend API: `https://factory-api.halovisionai.cloud` (same login)
+- n8n: `https://factory-n8n.halovisionai.cloud` (or `http://<VPS-IP>:47833` direct — its own separate login, `N8N_BASIC_AUTH_USER`/`PASSWORD` from `.env`)
 
 Postgres/Redis/Celery are on the `internal` Docker network only — no host
 port, no Traefik label, not reachable from outside the container network at
-all. That's intentional, not an oversight.
+all. Dashboard and backend also have no direct host port (unlike n8n) — the
+only way in is through Traefik, which is what enforces the login below.
 
-## 5. Lock it down — the API and dashboard have no auth yet
+## 5. Edge login (already enabled)
 
-Unlike n8n (which has `N8N_BASIC_AUTH_ACTIVE` built in), the FastAPI backend
-and Next.js dashboard have zero authentication in v1. Anyone who finds
-`factory-api.halovisionai.cloud` can trigger agent runs and approve/reject
-opportunities. `docker-compose.yml` already has commented-out Traefik
-basicauth middleware on both — enable it:
+The FastAPI backend and Next.js dashboard have no app-level auth of their
+own, so `docker-compose.yml` puts a Traefik basicauth middleware in front of
+both. Current password hash was generated once with `openssl passwd -apr1`
+and is checked into `docker-compose.yml` — username `admin`, password is
+whatever was generated at setup time (ask whoever ran it, or just rotate it,
+it costs nothing).
+
+To rotate the password:
 
 ```bash
-# generate the password hash (needs apache2-utils: apt install apache2-utils)
-htpasswd -nB admin
-# copy the output, e.g. admin:$2y$05$abc123...
+openssl passwd -apr1        # prompts for a new password, prints the hash
 ```
 
-Then in `docker-compose.yml`, uncomment the two `factory-api-auth` lines
-under `backend.labels` and the two `factory-dashboard-auth` lines under
-`dashboard.labels`, pasting your hash in place of `admin:$$2y$$...` (note
-the doubled `$$` — that's Compose's escaping for a literal `$`, required
-because htpasswd hashes are full of them). Then:
+Take that hash and replace both `basicauth.users=admin:...` lines in
+`docker-compose.yml` (the `factory-api-auth` and `factory-dashboard-auth`
+labels), doubling every `$` to `$$` (Compose's escaping for a literal `$`
+inside a label value — the hash is full of them). Then:
 
 ```bash
 docker compose up -d
 ```
-
-Do this before telling anyone else the URL exists.
 
 ## 6. Automated backups
 
@@ -126,8 +125,8 @@ call counts as the loop runs.
 |---|---|---|
 | h4h | 8082 (direct only, no Traefik) | — |
 | LG KI (school-ai-2) | 47821 | `halovisionai.cloud/lgai` |
-| **ai-company dashboard** | **47831** | **`factory.halovisionai.cloud`** |
-| **ai-company backend** | **47832** | **`factory-api.halovisionai.cloud`** |
+| **ai-company dashboard** | Traefik-only, no host port | **`factory.halovisionai.cloud`** |
+| **ai-company backend** | Traefik-only, no host port | **`factory-api.halovisionai.cloud`** |
 | **ai-company n8n** | **47833** | **`factory-n8n.halovisionai.cloud`** |
 | Sable2 n8n (existing, separate instance) | — | `n8n.halovisionai.cloud` |
 | seelenhafen / hydron-one / Myriam / halo4 / sable(sidequest) | Traefik-only, no host port | path-based on `halovisionai.cloud` |

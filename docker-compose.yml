@@ -6,13 +6,13 @@
 # Hosting pattern matches the rest of this repo's sites (seelenhafen, halo4,
 # hydron-one, school-ai-2/LG KI, ...): shared Traefik reverse proxy on the
 # external `traefik-proxy` network, TLS via the `letsencrypt` certresolver.
-# Public services ALSO publish an "exotic" host port as a direct-access
-# fallback that needs no DNS/Traefik — same convention LG KI uses (47821).
-# Ports in use elsewhere on this VPS: 8082 (h4h), 47821 (LG KI). This stack
-# claims the 4783x block so it can never collide:
-#   47831 -> dashboard   (https://factory.halovisionai.cloud)
-#   47832 -> backend API (https://factory-api.halovisionai.cloud)
-#   47833 -> n8n          (https://factory-n8n.halovisionai.cloud)
+# Dashboard and backend are Traefik-only (no direct host port) — they have
+# no app-level auth of their own, so a direct port would bypass the Traefik
+# basicauth middleware below entirely. n8n keeps its direct port (47833)
+# since N8N_BASIC_AUTH_ACTIVE gates it either way.
+#   https://factory.halovisionai.cloud      -> dashboard
+#   https://factory-api.halovisionai.cloud  -> backend API
+#   47833 / https://factory-n8n.halovisionai.cloud -> n8n
 # Postgres/Redis/Celery are internal-only — no host port, no Traefik label,
 # on purpose: nothing external should ever reach them directly.
 #
@@ -68,10 +68,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
-    ports:
-      # Exotic direct-access fallback — bypasses Traefik/DNS entirely:
-      # http://<VPS-IP>:47832
-      - "47832:8000"
+    # No host port: the API has no app-level auth, only the Traefik basicauth
+    # middleware below — a direct port would bypass it entirely.
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,11 +84,10 @@ services:
       - traefik.http.routers.factory-api.tls=true
       - traefik.http.routers.factory-api.tls.certresolver=letsencrypt
       - traefik.http.services.factory-api.loadbalancer.server.port=8000
-      # No auth exists on this API (see ARCHITECTURE.md / DEPLOY.md) — until
-      # it does, uncomment this to require a login at the edge. Generate the
-      # hash with: echo $(htpasswd -nB admin) | sed -e 's/\$/\$\$/g'
-      # - traefik.http.middlewares.factory-api-auth.basicauth.users=admin:$$2y$$...
-      # - traefik.http.routers.factory-api.middlewares=factory-api-auth
+      # Edge login (admin / see DEPLOY.md for the password) — generated with
+      # `openssl passwd -apr1`. Rotate: regenerate the hash and replace below.
+      - traefik.http.middlewares.factory-api-auth.basicauth.users=admin:$$apr1$$/3Te6uic$$aldRSy0ggLYISLV/gv2rn/
+      - traefik.http.routers.factory-api.middlewares=factory-api-auth
 
   celery_worker:
     build:
@@ -144,8 +141,7 @@ services:
     restart: unless-stopped
     networks:
       - traefik-proxy
-    ports:
-      - "47831:3000"
+    # No host port either — same reasoning as backend above.
     depends_on:
       - backend
     mem_limit: 256m
@@ -157,10 +153,9 @@ services:
       - traefik.http.routers.factory-dashboard.tls=true
       - traefik.http.routers.factory-dashboard.tls.certresolver=letsencrypt
       - traefik.http.services.factory-dashboard.loadbalancer.server.port=3000
-      # Same as the API — this is a private ops dashboard, uncomment once
-      # you've generated a hash (see backend service above):
-      # - traefik.http.middlewares.factory-dashboard-auth.basicauth.users=admin:$$2y$$...
-      # - traefik.http.routers.factory-dashboard.middlewares=factory-dashboard-auth
+      # Same login as the API (see backend service above / DEPLOY.md).
+      - traefik.http.middlewares.factory-dashboard-auth.basicauth.users=admin:$$apr1$$/3Te6uic$$aldRSy0ggLYISLV/gv2rn/
+      - traefik.http.routers.factory-dashboard.middlewares=factory-dashboard-auth
 
   n8n:
     image: n8nio/n8n:latest
