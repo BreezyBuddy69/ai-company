@@ -54,5 +54,5 @@ jobs:
           # meant to be deploy-target-agnostic (see dashboard/lib/api.ts
           # apiBase() runtime fallback) so it works on any VPS IP unrebuilt.
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}:latest
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/breezybuddy69/${{ matrix.name }}:latest
+            ${{ env.REGISTRY }}/breezybuddy69/${{ matrix.name }}:${{ github.sha }}
