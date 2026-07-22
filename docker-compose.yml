@@ -6,10 +6,11 @@
 # Hosting pattern matches the rest of this repo's sites (seelenhafen, halo4,
 # hydron-one, school-ai-2/LG KI, ...): shared Traefik reverse proxy on the
 # external `traefik-proxy` network, TLS via the `letsencrypt` certresolver.
-# Dashboard and backend are Traefik-only (no direct host port) — they have
-# no app-level auth of their own, so a direct port would bypass the Traefik
-# basicauth middleware below entirely. n8n keeps its direct port (47833)
-# since N8N_BASIC_AUTH_ACTIVE gates it either way.
+# Dashboard and backend are Traefik-only (no direct host port) — both have
+# their own app-level auth now (dashboard: HTTP Basic Auth via
+# dashboard/middleware.ts; backend: X-API-Key, see app/core/auth.py), but no
+# host port anyway since Traefik is the only intended path in. n8n keeps its
+# direct port (47833) since N8N_BASIC_AUTH_ACTIVE gates it either way.
 #   https://factory.halovisionai.cloud      -> dashboard
 #   https://factory-api.halovisionai.cloud  -> backend API
 #   47833 / https://factory-n8n.halovisionai.cloud -> n8n
@@ -148,6 +149,12 @@ services:
     restart: unless-stopped
     networks:
       - traefik-proxy
+    env_file: .env
+    environment:
+      # Read at request time by dashboard/middleware.ts (HTTP Basic Auth) —
+      # rotate by changing .env and restarting, no rebuild needed.
+      DASHBOARD_USER: ${DASHBOARD_USER:?set DASHBOARD_USER in .env}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:?set DASHBOARD_PASSWORD in .env}
     # No host port either — same reasoning as backend above.
     depends_on:
       - backend
@@ -160,9 +167,12 @@ services:
       - traefik.http.routers.factory-dashboard.tls=true
       - traefik.http.routers.factory-dashboard.tls.certresolver=letsencrypt
       - traefik.http.services.factory-dashboard.loadbalancer.server.port=3000
-      # Same login as the API (see backend service above / DEPLOY.md).
-      - traefik.http.middlewares.factory-dashboard-auth.basicauth.users=admin:$$apr1$$/3Te6uic$$aldRSy0ggLYISLV/gv2rn/
-      - traefik.http.routers.factory-dashboard.middlewares=factory-dashboard-auth
+      # No Traefik basicauth label here on purpose (used to be one, but its
+      # htpasswd hash was a second secret that could drift from what the
+      # user actually knows — see git history). dashboard/middleware.ts now
+      # gates the whole app the same way in every deploy path (local dev,
+      # Hostinger open, Traefik), driven by the DASHBOARD_USER/PASSWORD env
+      # above — one secret, no htpasswd dance to rotate it.
 
   n8n:
     image: n8nio/n8n:latest

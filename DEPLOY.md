@@ -35,11 +35,12 @@ nano .env
 ```
 
 At minimum: `OPENROUTER_API_KEY` (free at https://openrouter.ai/keys, no
-card needed), `API_KEY` (required — `openssl rand -hex 24`; `docker compose
-up` refuses to start without it), `POSTGRES_PASSWORD`, `N8N_BASIC_AUTH_PASSWORD`
-— real values, not the placeholders. Leave `DASHBOARD_PUBLIC_API_URL`/
-`N8N_HOST` commented out unless you're testing without Traefik (see the
-comments in `.env.example`).
+card needed), `API_KEY` and `DASHBOARD_USER`/`DASHBOARD_PASSWORD` (all
+required — `docker compose up` refuses to start without them; generate with
+`openssl rand -hex 24` / pick your own login), `POSTGRES_PASSWORD`,
+`N8N_BASIC_AUTH_PASSWORD` — real values, not the placeholders. Leave
+`DASHBOARD_PUBLIC_API_URL`/`N8N_HOST` commented out unless you're testing
+without Traefik (see the comments in `.env.example`).
 
 ## 4. Build and start
 
@@ -59,13 +60,12 @@ all. Dashboard and backend also have no direct host port (unlike n8n).
 
 ## 5. Auth (two different mechanisms, on purpose)
 
-**Dashboard**: Traefik basicauth (username `admin`, password set when the
-hash was generated — rotate anytime with `openssl passwd -apr1`, paste the
-new hash into the `factory-dashboard-auth` label in `docker-compose.yml`,
-doubling every `$` to `$$`, then `docker compose up -d`). This works because
-loading the dashboard is a normal same-origin browser navigation.
+**Dashboard**: HTTP Basic Auth enforced by `dashboard/middleware.ts`, using
+`DASHBOARD_USER`/`DASHBOARD_PASSWORD` from `.env`. Rotate anytime by editing
+`.env` and `docker compose up -d dashboard` (restart only — no rebuild, since
+middleware reads env at request time, not build time).
 
-**Backend API**: NOT Traefik basicauth — the dashboard's JS calls the API
+**Backend API**: NOT Basic Auth — the dashboard's JS calls the API
 cross-origin via `fetch()`, and a browser can't complete an HTTP-auth
 challenge for a CORS preflight request; it just fails with "Failed to
 fetch" (this broke the dashboard once already — don't reintroduce it).

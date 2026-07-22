@@ -142,7 +142,6 @@ new agent.
   `DEPLOY.md` for the exact steps to run it on the shared halovisionai.cloud
   Hostinger VPS, matching the Traefik pattern the rest of this repo's sites
   already use (`docker-compose.yml` has the routing/port assignment).
-- **API authentication** — the FastAPI backend and dashboard have none yet.
-  `docker-compose.yml` ships commented-out Traefik basicauth middleware for
-  both, ready to enable with one `htpasswd` command — see `DEPLOY.md` step 5.
-  Not enabled by default because it needs a password only you should set.
+- ~~**API authentication**~~ — done: backend requires `X-API-Key`
+  (`app/core/auth.py`), dashboard requires HTTP Basic Auth
+  (`dashboard/middleware.ts`). See `DEPLOY.md` step 5.

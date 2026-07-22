@@ -13,10 +13,14 @@
 #   - All secrets are placeholders below, not read from a .env file (Docker
 #     Manager deploys from this single file) — edit them before/at deploy
 #     time in the Docker Manager UI, or in this file before pushing.
-#   - Zero auth by default (API_KEY blank = open, see backend/app/core/auth.py)
-#     so you can confirm it boots before locking anything down. Set API_KEY
-#     to a real value, redeploy, and the dashboard picks it up automatically
-#     (baked into its image at build time — see the workflow above).
+#   - Zero auth by default (API_KEY / DASHBOARD_USER / DASHBOARD_PASSWORD all
+#     blank = open, see backend/app/core/auth.py and dashboard/middleware.ts)
+#     so you can confirm it boots before locking anything down. Set
+#     DASHBOARD_USER/PASSWORD and restart the dashboard container to gate the
+#     UI immediately (no rebuild needed — read at request time). API_KEY also
+#     needs the dashboard image rebuilt with a matching NEXT_PUBLIC_API_KEY
+#     build arg, which this prebuilt-image variant doesn't set — leave it
+#     blank here unless you switch to building your own dashboard image.
 
 services:
   postgres:
@@ -105,6 +109,12 @@ services:
     restart: unless-stopped
     networks:
       - internal
+    environment:
+      # HTTP Basic Auth on the whole dashboard (dashboard/middleware.ts),
+      # read at request time — set these before exposing 47831 publicly.
+      # Blank = open, same as API_KEY above. No rebuild needed to rotate.
+      DASHBOARD_USER: ""
+      DASHBOARD_PASSWORD: ""
     ports:
       - "47831:3000"
     depends_on:
