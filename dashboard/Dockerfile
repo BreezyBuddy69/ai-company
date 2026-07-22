@@ -5,7 +5,9 @@ RUN npm install
 COPY . .
 # Baked in at build time — Next.js inlines NEXT_PUBLIC_* into the client bundle.
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXT_PUBLIC_API_KEY=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_KEY=$NEXT_PUBLIC_API_KEY
 RUN npm run build
 
 FROM node:22-alpine AS runner

@@ -35,9 +35,11 @@ nano .env
 ```
 
 At minimum: `OPENROUTER_API_KEY` (free at https://openrouter.ai/keys, no
-card needed), `POSTGRES_PASSWORD`, `N8N_BASIC_AUTH_PASSWORD` — real values,
-not the placeholders. Leave `DASHBOARD_PUBLIC_API_URL`/`N8N_HOST` commented
-out unless you're testing without Traefik (see the comments in `.env.example`).
+card needed), `API_KEY` (required — `openssl rand -hex 24`; `docker compose
+up` refuses to start without it), `POSTGRES_PASSWORD`, `N8N_BASIC_AUTH_PASSWORD`
+— real values, not the placeholders. Leave `DASHBOARD_PUBLIC_API_URL`/
+`N8N_HOST` commented out unless you're testing without Traefik (see the
+comments in `.env.example`).
 
 ## 4. Build and start
 
@@ -48,36 +50,34 @@ docker compose ps        # everything "healthy"/"running" within ~60s
 
 Reachable at:
 - Dashboard: `https://factory.halovisionai.cloud` (login: `admin` / see below)
-- Backend API: `https://factory-api.halovisionai.cloud` (same login)
+- Backend API: `https://factory-api.halovisionai.cloud` (no browser login — see why below)
 - n8n: `https://factory-n8n.halovisionai.cloud` (or `http://<VPS-IP>:47833` direct — its own separate login, `N8N_BASIC_AUTH_USER`/`PASSWORD` from `.env`)
 
 Postgres/Redis/Celery are on the `internal` Docker network only — no host
 port, no Traefik label, not reachable from outside the container network at
-all. Dashboard and backend also have no direct host port (unlike n8n) — the
-only way in is through Traefik, which is what enforces the login below.
+all. Dashboard and backend also have no direct host port (unlike n8n).
 
-## 5. Edge login (already enabled)
+## 5. Auth (two different mechanisms, on purpose)
 
-The FastAPI backend and Next.js dashboard have no app-level auth of their
-own, so `docker-compose.yml` puts a Traefik basicauth middleware in front of
-both. Current password hash was generated once with `openssl passwd -apr1`
-and is checked into `docker-compose.yml` — username `admin`, password is
-whatever was generated at setup time (ask whoever ran it, or just rotate it,
-it costs nothing).
+**Dashboard**: Traefik basicauth (username `admin`, password set when the
+hash was generated — rotate anytime with `openssl passwd -apr1`, paste the
+new hash into the `factory-dashboard-auth` label in `docker-compose.yml`,
+doubling every `$` to `$$`, then `docker compose up -d`). This works because
+loading the dashboard is a normal same-origin browser navigation.
 
-To rotate the password:
-
-```bash
-openssl passwd -apr1        # prompts for a new password, prints the hash
-```
-
-Take that hash and replace both `basicauth.users=admin:...` lines in
-`docker-compose.yml` (the `factory-api-auth` and `factory-dashboard-auth`
-labels), doubling every `$` to `$$` (Compose's escaping for a literal `$`
-inside a label value — the hash is full of them). Then:
+**Backend API**: NOT Traefik basicauth — the dashboard's JS calls the API
+cross-origin via `fetch()`, and a browser can't complete an HTTP-auth
+challenge for a CORS preflight request; it just fails with "Failed to
+fetch" (this broke the dashboard once already — don't reintroduce it).
+Instead the backend checks a shared secret, `API_KEY` from `.env`, against
+the `X-API-Key` header on every request except `/health`. The dashboard gets
+the same value baked into its JS bundle at build time
+(`NEXT_PUBLIC_API_KEY`, set from `API_KEY` in `docker-compose.yml`) — safe
+specifically because you need the dashboard's basicauth login to ever see
+that bundle. Rotate it by changing `API_KEY` in `.env` and rebuilding both:
 
 ```bash
-docker compose up -d
+docker compose up -d --build backend dashboard
 ```
 
 ## 6. Automated backups

@@ -68,8 +68,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
-    # No host port: the API has no app-level auth, only the Traefik basicauth
-    # middleware below — a direct port would bypass it entirely.
+      API_KEY: ${API_KEY:?set API_KEY in .env}
+    # No host port: bypassing Traefik would still hit an unauthenticated
+    # route unless API_KEY is set — see require_api_key in app/core/auth.py.
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,10 +85,12 @@ services:
       - traefik.http.routers.factory-api.tls=true
       - traefik.http.routers.factory-api.tls.certresolver=letsencrypt
       - traefik.http.services.factory-api.loadbalancer.server.port=8000
-      # Edge login (admin / see DEPLOY.md for the password) — generated with
-      # `openssl passwd -apr1`. Rotate: regenerate the hash and replace below.
-      - traefik.http.middlewares.factory-api-auth.basicauth.users=admin:$$apr1$$/3Te6uic$$aldRSy0ggLYISLV/gv2rn/
-      - traefik.http.routers.factory-api.middlewares=factory-api-auth
+      # No Traefik basicauth here on purpose: the dashboard calls this API
+      # cross-origin via fetch(), and a browser can't complete an HTTP-auth
+      # challenge for a CORS preflight — it just fails with "Failed to fetch".
+      # Auth is instead an app-level X-API-Key check (see API_KEY below /
+      # app/core/auth.py), which works fine with CORS since it's just a
+      # header the dashboard's JS sets itself.
 
   celery_worker:
     build:
@@ -137,6 +140,10 @@ services:
         # "backend" hostname. Defaults to the public Traefik URL; override
         # in .env if you're only using the direct port fallback.
         NEXT_PUBLIC_API_URL: ${DASHBOARD_PUBLIC_API_URL:-https://factory-api.halovisionai.cloud}
+        # Same value as backend's API_KEY — baked into the dashboard's JS
+        # bundle. Safe here specifically because the dashboard route itself
+        # sits behind the Traefik basicauth below (see lib/api.ts comment).
+        NEXT_PUBLIC_API_KEY: ${API_KEY:?set API_KEY in .env}
     container_name: factory-dashboard
     restart: unless-stopped
     networks:

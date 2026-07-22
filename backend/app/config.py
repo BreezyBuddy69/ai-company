@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://factory:factory@postgres:5432/factory"
     redis_url: str = "redis://redis:6379/0"
 
+    # --- Edge auth ---
+    # Shared secret the dashboard sends as X-API-Key. Empty = open (local dev).
+    api_key: str = ""
+
     # --- Model router ---
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"

@@ -1,10 +1,11 @@
 import logging
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import agents, dashboard, evolution, finance, health, models, opportunities, tasks
 from app.config import get_settings
+from app.core.auth import require_api_key
 
 settings = get_settings()
 
@@ -27,11 +28,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(health.router)
-app.include_router(agents.router)
-app.include_router(opportunities.router)
-app.include_router(tasks.router)
-app.include_router(models.router)
-app.include_router(finance.router)
-app.include_router(evolution.router)
-app.include_router(dashboard.router)
+protected = [Depends(require_api_key)]
+
+app.include_router(health.router)  # unauthenticated on purpose — used for curl/uptime checks
+app.include_router(agents.router, dependencies=protected)
+app.include_router(opportunities.router, dependencies=protected)
+app.include_router(tasks.router, dependencies=protected)
+app.include_router(models.router, dependencies=protected)
+app.include_router(finance.router, dependencies=protected)
+app.include_router(evolution.router, dependencies=protected)
+app.include_router(dashboard.router, dependencies=protected)
