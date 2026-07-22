@@ -22,7 +22,8 @@ services:
   postgres:
     image: ghcr.io/breezybuddy69/ai-company-postgres:latest
     restart: unless-stopped
-    networks: [internal]
+    networks:
+      - internal
     environment:
       POSTGRES_USER: factory
       POSTGRES_PASSWORD: CHANGE_ME_STRONG_PASSWORD
@@ -39,7 +40,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    networks: [internal]
+    networks:
+      - internal
     command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -51,7 +53,8 @@ services:
   backend:
     image: ghcr.io/breezybuddy69/ai-company-backend:latest
     restart: unless-stopped
-    networks: [internal]
+    networks:
+      - internal
     environment:
       DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
       REDIS_URL: redis://redis:6379/0
@@ -64,47 +67,44 @@ services:
     ports:
       - "47832:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
     mem_limit: 384m
 
   celery_worker:
     image: ghcr.io/breezybuddy69/ai-company-backend:latest
     restart: unless-stopped
-    networks: [internal]
+    networks:
+      - internal
     command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
     environment:
       DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
       REDIS_URL: redis://redis:6379/0
       OPENROUTER_API_KEY: ""
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
     mem_limit: 384m
 
   celery_beat:
     image: ghcr.io/breezybuddy69/ai-company-backend:latest
     restart: unless-stopped
-    networks: [internal]
+    networks:
+      - internal
     command: ["celery", "-A", "app.celery_app", "beat", "--loglevel=INFO"]
     environment:
       DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
       REDIS_URL: redis://redis:6379/0
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
     mem_limit: 128m
 
   dashboard:
     image: ghcr.io/breezybuddy69/ai-company-dashboard:latest
     restart: unless-stopped
-    networks: [internal]
+    networks:
+      - internal
     ports:
       - "47831:3000"
     depends_on:
@@ -114,7 +114,8 @@ services:
   n8n:
     image: n8nio/n8n:latest
     restart: unless-stopped
-    networks: [internal]
+    networks:
+      - internal
     environment:
       N8N_BASIC_AUTH_ACTIVE: "true"
       N8N_BASIC_AUTH_USER: admin
