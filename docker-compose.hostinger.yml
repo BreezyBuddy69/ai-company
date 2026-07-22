@@ -68,6 +68,11 @@ services:
       # Optional edge auth (blank = open). Set once you've confirmed the
       # stack boots, then redeploy both backend and dashboard.
       API_KEY: ""
+    volumes:
+      # Shared across backend/celery_worker/celery_beat so an agent cloned
+      # by core/evolution.py (see docker-compose.yml's comment) is visible
+      # everywhere and survives a restart.
+      - agent_configs:/agents/configs
     ports:
       - "47832:8000"
     depends_on:
@@ -85,6 +90,8 @@ services:
       DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
       REDIS_URL: redis://redis:6379/0
       OPENROUTER_API_KEY: ""
+    volumes:
+      - agent_configs:/agents/configs
     depends_on:
       - postgres
       - redis
@@ -99,6 +106,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      - agent_configs:/agents/configs
     depends_on:
       - postgres
       - redis
@@ -145,3 +154,4 @@ networks:
 volumes:
   postgres_data:
   n8n_data:
+  agent_configs:

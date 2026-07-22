@@ -78,14 +78,24 @@ before it can ever be called, regardless of its priority. See
 `test_paid_model_never_selected_even_though_highest_priority` in
 `backend/tests/test_model_router.py`.
 
-**Evolution engine ships scoring + schema, not automatic mutation.** An
-automatic clone/archive/mutate cycle needs real weeks of revenue and usage
-data to make sound decisions on. Faking that data to make the demo look more
-finished would violate the brief's own "never fake metrics" rule. v1 ships
-the weighted scoring formulas (`core/evolution.py`), the `evolution_history`
-table with `parent_id` (ready for a real generational tree), and a
-manually-triggered scoring endpoint. The automatic cycle is a real Phase-2
-feature once there's real data to evolve against.
+**Evolution engine runs a real clone/retire cycle, judged only on objective
+data.** Same-role agents compete under a shared name family (`scout`,
+`scout-g2`, `scout-g3`, ...) — `app/tasks.py`'s scheduled cycles now run
+every active variant in a family, not one hardcoded name, so variants
+actually accumulate their own `agent_runs`. Daily (`run_evolution_cycle`,
+also triggerable via `POST /api/evolution/compete/{family}`),
+`core/evolution.run_role_competition` scores each variant purely from
+`agent_runs` aggregates (success rate, latency, cost — never an LLM's
+opinion of "quality", which would just be a guess dressed up as a metric):
+exactly one variant bootstraps a mutated sibling once it's proven itself;
+two or more retires the worst and clones the best, keeping the population
+size constant. Below `MIN_RUNS_FOR_COMPETITION` (5) runs, it's a no-op —
+the "never fake metrics" rule holds by refusing to judge on too little data,
+not by refusing to judge automatically at all. `record_revenue`
+(`core/tools.py`) clones a product's originating agent (`Product.
+created_by_agent_id`) the moment its first revenue lands. Product scoring
+(`score_product`) stays manual/caller-supplied — there's still no product
+live to generate that data from.
 
 ## The first agent loop, concretely
 
@@ -137,7 +147,10 @@ new agent.
   there's no product generating real transactions yet.
 - **Real n8n workflows** — the service is in `docker-compose.yml` and ready
   to use; no workflow JSON is deployed into it yet.
-- **Automatic evolution mutation cycle** — see above.
+- ~~**Automatic evolution mutation cycle**~~ — done, see above. Only wired
+  for `scout`/`research`/`ceo` (`app/tasks.EVOLVING_FAMILIES`) since those are
+  the only roles actually running; add a role there once it leaves
+  `status=paused`.
 - **Actual VPS deployment** — this repo was built without VPS access; see
   `DEPLOY.md` for the exact steps to run it on the shared halovisionai.cloud
   Hostinger VPS, matching the Traefik pattern the rest of this repo's sites

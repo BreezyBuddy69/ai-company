@@ -24,4 +24,12 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.run_scout_cycle",
         "schedule": crontab(minute=0, hour="*/6"),
     },
+    # Judges each family's active variants on real agent_runs data (see
+    # core/evolution.py) — no-ops on any family without enough runs yet, so
+    # this is safe to leave on from day one rather than gated on real data
+    # existing first.
+    "evolution-cycle-daily": {
+        "task": "app.tasks.run_evolution_cycle",
+        "schedule": crontab(minute=0, hour=3),
+    },
 }

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.core.memory import write_memory
-from app.db.models import Opportunity
+from app.db.models import Agent, FinanceTransaction, Opportunity, Product
 
 HN_SEARCH_URL = "https://hn.algolia.com/api/v1/search"
 GITHUB_SEARCH_URL = "https://api.github.com/search/issues"
@@ -139,6 +139,42 @@ def decide_opportunity(db: Session, opportunity_id: uuid.UUID, *, decision: str,
     return opp
 
 
+def record_revenue(db: Session, product_id: uuid.UUID, *, amount_usd: float, description: str | None = None) -> dict[str, Any]:
+    """Logs a real revenue transaction and, the moment it's this product's
+    first one, clones whichever agent's Product.created_by_agent_id is set —
+    the "as soon as one makes money, clone it" policy from core/evolution.py.
+    No-ops the clone step (but still logs the revenue) if the product has no
+    recorded creator or that agent's already been retired."""
+    product = db.get(Product, product_id)
+    if product is None:
+        raise ValueError(f"product {product_id} not found")
+
+    is_first_revenue = not any(
+        t.type == "revenue" for t in db.scalars(select(FinanceTransaction).where(FinanceTransaction.product_id == product.id))
+    )
+    txn = FinanceTransaction(product_id=product.id, type="revenue", amount_usd=amount_usd, description=description)
+    db.add(txn)
+    db.flush()
+
+    result: dict[str, Any] = {"transaction_id": str(txn.id)}
+    if is_first_revenue and product.created_by_agent_id:
+        agent = db.get(Agent, product.created_by_agent_id)
+        if agent and agent.status == "active":
+            from pathlib import Path
+
+            from app.agents.runner import resolve_agent_dirs
+            from app.core.evolution import clone_agent
+
+            config_dir, _, _ = resolve_agent_dirs(get_settings())
+            clone = clone_agent(
+                db, Path(config_dir), agent,
+                mutation_notes=f"first revenue on product '{product.name}' (${amount_usd}) — auto-cloned",
+            )
+            result["cloned_agent"] = clone.name
+    db.commit()
+    return result
+
+
 TOOL_REGISTRY = {
     "search_hackernews": search_hackernews,
     "search_github_issues": search_github_issues,
@@ -147,6 +183,7 @@ TOOL_REGISTRY = {
     "read_opportunities": read_opportunities,
     "score_opportunity": score_opportunity,
     "decide_opportunity": decide_opportunity,
+    "record_revenue": record_revenue,
 }
 
 # Short, LLM-facing docs — kept separate from docstrings so prompts stay tiny.
@@ -182,5 +219,9 @@ TOOL_DESCRIPTIONS = {
     "decide_opportunity": {
         "description": "Record the CEO decision on a researched opportunity.",
         "args": {"opportunity_id": "uuid", "decision": "approved|watch|rejected", "decision_rationale": "string"},
+    },
+    "record_revenue": {
+        "description": "Log a real revenue transaction for a product. Its first-ever revenue auto-clones the agent that created it.",
+        "args": {"product_id": "uuid", "amount_usd": "float", "description": "string (optional)"},
     },
 }

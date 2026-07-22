@@ -16,6 +16,20 @@ from app.db.session import SessionLocal
 
 logger = logging.getLogger("tasks")
 
+# Every scheduled family competing under core/evolution.py's clone/retire
+# cycle. Add a role here once it moves off `status=paused` in db/init.sql.
+EVOLVING_FAMILIES = ("scout", "research", "ceo")
+
+
+def _active_variants(family: str) -> list[str]:
+    from app.core.evolution import active_variant_names
+
+    db = SessionLocal()
+    try:
+        return active_variant_names(db, family)
+    finally:
+        db.close()
+
 
 @celery_app.task(name="app.tasks.run_agent_task")
 def run_agent_task(agent_name: str, goal: str, task_type: str | None = None) -> dict:
@@ -31,6 +45,7 @@ def run_agent_task(agent_name: str, goal: str, task_type: str | None = None) -> 
 @celery_app.task(name="app.tasks.run_scout_cycle")
 def run_scout_cycle() -> dict:
     settings = get_settings()
+    variants = _active_variants("scout")
     processed = 0
     for keyword in settings.scout_keyword_list:
         goal = (
@@ -39,14 +54,15 @@ def run_scout_cycle() -> dict:
             "call create_opportunity with what you found, citing the source URL. If nothing credible "
             "turns up, just finish."
         )
-        try:
-            run_agent_task.run(agent_name="scout", goal=goal, task_type="scout_cycle")
-            processed += 1
-        except Exception:
-            logger.exception("scout cycle failed for keyword %s", keyword)
+        for variant in variants:
+            try:
+                run_agent_task.run(agent_name=variant, goal=goal, task_type="scout_cycle")
+                processed += 1
+            except Exception:
+                logger.exception("scout cycle failed for keyword %s variant %s", keyword, variant)
 
     run_research_cycle.delay()
-    return {"keywords_processed": processed}
+    return {"keywords_processed": processed, "variants": variants}
 
 
 @celery_app.task(name="app.tasks.run_research_cycle")
@@ -57,6 +73,7 @@ def run_research_cycle() -> dict:
     finally:
         db.close()
 
+    variants = _active_variants("research")
     researched = 0
     for opp_id in ids:
         goal = (
@@ -64,15 +81,16 @@ def run_research_cycle() -> dict:
             "Assess demand, existing competition, and realistic pricing, then call score_opportunity "
             "with a 0-100 research_score and concise research_notes."
         )
-        try:
-            run_agent_task.run(agent_name="research", goal=goal, task_type="research_opportunity")
-            researched += 1
-        except Exception:
-            logger.exception("research failed for opportunity %s", opp_id)
+        for variant in variants:
+            try:
+                run_agent_task.run(agent_name=variant, goal=goal, task_type="research_opportunity")
+                researched += 1
+            except Exception:
+                logger.exception("research failed for opportunity %s variant %s", opp_id, variant)
 
     if researched:
         run_ceo_review.delay()
-    return {"researched": researched}
+    return {"researched": researched, "variants": variants}
 
 
 @celery_app.task(name="app.tasks.run_ceo_review")
@@ -82,4 +100,20 @@ def run_ceo_review() -> dict:
         "For each one worth a decision, call decide_opportunity with approved, watch, or rejected "
         "and a short rationale grounded in its research_score and research_notes."
     )
-    return run_agent_task.run(agent_name="ceo", goal=goal, task_type="ceo_review")
+    results = []
+    for variant in _active_variants("ceo"):
+        results.append(run_agent_task.run(agent_name=variant, goal=goal, task_type="ceo_review"))
+    return {"results": results}
+
+
+@celery_app.task(name="app.tasks.run_evolution_cycle")
+def run_evolution_cycle() -> dict:
+    from app.agents.runner import resolve_agent_dirs
+    from app.core.evolution import run_role_competition
+
+    config_dir, _, _ = resolve_agent_dirs(get_settings())
+    db = SessionLocal()
+    try:
+        return {family: run_role_competition(db, config_dir, family) for family in EVOLVING_FAMILIES}
+    finally:
+        db.close()

@@ -19,9 +19,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    # No auth exists on this API yet (see DEPLOY.md) — CORS is not a real
-    # security boundary here regardless of origin list, so we don't pretend
-    # otherwise. The actual boundary is the VPS firewall.
+    # CORS itself is not the security boundary — the dashboard calls this API
+    # cross-origin, so a fixed origin list wouldn't add anything a browser
+    # enforces. Actual auth is X-API-Key below (see app/core/auth.py).
     allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],

@@ -70,6 +70,12 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
       API_KEY: ${API_KEY:?set API_KEY in .env}
+    volumes:
+      # Shared with celery_worker/celery_beat so an agent cloned by
+      # core/evolution.py (written by whichever container runs the
+      # scheduled cycle) is visible everywhere, and survives a restart —
+      # first `up` seeds it from the image's baked-in /agents/configs.
+      - agent_configs:/agents/configs
     # No host port: bypassing Traefik would still hit an unauthenticated
     # route unless API_KEY is set — see require_api_key in app/core/auth.py.
     depends_on:
@@ -106,6 +112,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      - agent_configs:/agents/configs
     depends_on:
       postgres:
         condition: service_healthy
@@ -126,6 +134,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      - agent_configs:/agents/configs
     depends_on:
       postgres:
         condition: service_healthy
@@ -214,3 +224,4 @@ networks:
 volumes:
   postgres_data:
   n8n_data:
+  agent_configs:

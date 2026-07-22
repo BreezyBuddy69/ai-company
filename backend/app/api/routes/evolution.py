@@ -5,7 +5,9 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.evolution import score_agent, score_product
+from app.agents.runner import resolve_agent_dirs
+from app.config import get_settings
+from app.core.evolution import run_role_competition, score_agent, score_product
 from app.db.models import Agent, EvolutionHistory, Product
 from app.db.session import get_db
 
@@ -53,3 +55,12 @@ def score_product_endpoint(product_id: uuid.UUID, body: ScoreIn, db: Session = D
     entry = score_product(db, product, body.values, mutation_notes=body.mutation_notes)
     db.commit()
     return {"id": str(entry.id), "score": float(entry.score), "breakdown": entry.score_breakdown}
+
+
+@router.post("/compete/{family}")
+def compete_endpoint(family: str, db: Session = Depends(get_db)):
+    """Manual trigger for the clone/retire cycle Celery Beat also runs daily
+    (app.tasks.run_evolution_cycle) — mainly for testing without waiting for
+    the schedule. See core/evolution.run_role_competition for the policy."""
+    config_dir, _, _ = resolve_agent_dirs(get_settings())
+    return run_role_competition(db, config_dir, family)

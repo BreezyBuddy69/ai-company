@@ -123,15 +123,18 @@ CREATE INDEX idx_opportunities_status ON opportunities(status);
 -- ============================================================
 
 CREATE TABLE products (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    opportunity_id UUID REFERENCES opportunities(id),
-    name           TEXT NOT NULL,
-    spec           JSONB NOT NULL DEFAULT '{}',
-    status         TEXT NOT NULL DEFAULT 'idea' CHECK (status IN ('idea', 'mvp', 'launched', 'paused', 'archived')),
-    pricing        JSONB NOT NULL DEFAULT '{}',
-    repo_url       TEXT,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    opportunity_id      UUID REFERENCES opportunities(id),
+    name                TEXT NOT NULL,
+    spec                JSONB NOT NULL DEFAULT '{}',
+    status              TEXT NOT NULL DEFAULT 'idea' CHECK (status IN ('idea', 'mvp', 'launched', 'paused', 'archived')),
+    pricing             JSONB NOT NULL DEFAULT '{}',
+    repo_url            TEXT,
+    -- Agent cloned the moment this product records its first revenue —
+    -- see core/evolution.py's clone-on-revenue trigger.
+    created_by_agent_id UUID REFERENCES agents(id),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE experiments (

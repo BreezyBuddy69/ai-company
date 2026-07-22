@@ -47,6 +47,10 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      # Shared with celery_worker so an agent cloned by core/evolution.py is
+      # visible to a manual /api/agents/{name}/run call too.
+      - agent_configs_local:/agents/configs
     ports:
       - "8000:8000"
     depends_on:
@@ -67,6 +71,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      - agent_configs_local:/agents/configs
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,6 +91,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
+    volumes:
+      - agent_configs_local:/agents/configs
     depends_on:
       postgres:
         condition: service_healthy
@@ -125,3 +133,4 @@ services:
 volumes:
   postgres_data_local:
   n8n_data_local:
+  agent_configs_local:

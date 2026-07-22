@@ -129,6 +129,10 @@ class Product(Base):
     status: Mapped[str] = mapped_column(String, default="idea")
     pricing: Mapped[dict] = mapped_column(JSONB, default=dict)
     repo_url: Mapped[str | None] = mapped_column(String)
+    # Which agent gets cloned the moment this product records its first
+    # revenue (core/evolution.py's clone-on-revenue trigger). Nullable: not
+    # every product traces back to one agent (e.g. manually entered ones).
+    created_by_agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
