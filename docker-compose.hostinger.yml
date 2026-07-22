@@ -1,0 +1,136 @@
+# Standalone deploy for Hostinger's Docker Manager (paste this file's raw
+# GitHub URL into its Compose-URL field — not the repo homepage).
+#
+# Differs from docker-compose.yml (the Traefik/SSH deploy) on purpose:
+#   - No `build:` — Docker Manager only pulls, it can't build. Images are
+#     published by .github/workflows/docker-publish.yml on every push to
+#     backend/ or dashboard/: ghcr.io/breezybuddy69/ai-company-{backend,dashboard}.
+#     Those packages must be public (Package settings -> Change visibility)
+#     or Docker Manager can't pull them without registry credentials.
+#   - No Traefik network/labels/HTTPS — reachable directly at
+#     http://<VPS_IP>:47831 (dashboard) and http://<VPS_IP>:47832 (API).
+#     Put Traefik/HTTPS in front only once this works over plain HTTP.
+#   - All secrets are placeholders below, not read from a .env file (Docker
+#     Manager deploys from this single file) — edit them before/at deploy
+#     time in the Docker Manager UI, or in this file before pushing.
+#   - Zero auth by default (API_KEY blank = open, see backend/app/core/auth.py)
+#     so you can confirm it boots before locking anything down. Set API_KEY
+#     to a real value, redeploy, and the dashboard picks it up automatically
+#     (baked into its image at build time — see the workflow above).
+
+services:
+  postgres:
+    image: ghcr.io/breezybuddy69/ai-company-postgres:latest
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      POSTGRES_USER: factory
+      POSTGRES_PASSWORD: CHANGE_ME_STRONG_PASSWORD
+      POSTGRES_DB: factory
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U factory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [internal]
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 96m
+
+  backend:
+    image: ghcr.io/breezybuddy69/ai-company-backend:latest
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
+      REDIS_URL: redis://redis:6379/0
+      # Free key, no card needed: https://openrouter.ai/keys — required
+      # before any agent can actually think (empty = agents no-op).
+      OPENROUTER_API_KEY: ""
+      # Optional edge auth (blank = open). Set once you've confirmed the
+      # stack boots, then redeploy both backend and dashboard.
+      API_KEY: ""
+    ports:
+      - "47832:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 384m
+
+  celery_worker:
+    image: ghcr.io/breezybuddy69/ai-company-backend:latest
+    restart: unless-stopped
+    networks: [internal]
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
+      REDIS_URL: redis://redis:6379/0
+      OPENROUTER_API_KEY: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 384m
+
+  celery_beat:
+    image: ghcr.io/breezybuddy69/ai-company-backend:latest
+    restart: unless-stopped
+    networks: [internal]
+    command: ["celery", "-A", "app.celery_app", "beat", "--loglevel=INFO"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 128m
+
+  dashboard:
+    image: ghcr.io/breezybuddy69/ai-company-dashboard:latest
+    restart: unless-stopped
+    networks: [internal]
+    ports:
+      - "47831:3000"
+    depends_on:
+      - backend
+    mem_limit: 256m
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: admin
+      N8N_BASIC_AUTH_PASSWORD: CHANGE_ME_STRONG_PASSWORD
+      N8N_PROTOCOL: http
+      GENERIC_TIMEZONE: UTC
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      - "47833:5678"
+    mem_limit: 256m
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  n8n_data:

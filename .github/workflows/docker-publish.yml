@@ -1,0 +1,58 @@
+name: Publish images to GHCR
+
+# Builds the two images Docker Manager needs pre-built (it can't run `docker
+# build` itself, only pull) and pushes them to ghcr.io on every push to
+# master that touches backend/ or dashboard/. See docker-compose.hostinger.yml.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "backend/**"
+      - "dashboard/**"
+      - "db/**"
+      - "agents/**"
+      - "skills/**"
+      - "model_registry.yaml"
+      - ".github/workflows/docker-publish.yml"
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: ai-company-backend
+            context: .
+            dockerfile: backend/Dockerfile
+          - name: ai-company-dashboard
+            context: ./dashboard
+            dockerfile: dashboard/Dockerfile
+          - name: ai-company-postgres
+            context: ./db
+            dockerfile: db/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          # No NEXT_PUBLIC_API_URL here on purpose: the dashboard image is
+          # meant to be deploy-target-agnostic (see dashboard/lib/api.ts
+          # apiBase() runtime fallback) so it works on any VPS IP unrebuilt.
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}:latest
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}:${{ github.sha }}

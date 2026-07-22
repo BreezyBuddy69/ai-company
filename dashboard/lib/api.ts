@@ -3,11 +3,22 @@
 // would need `http://backend:8000`, browser needs a publicly reachable URL)
 // and keeps the "no WebSocket, simple polling" resource-conscious design
 // from ARCHITECTURE.md honest for the Logs/Overview pages too.
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// NEXT_PUBLIC_API_URL is baked in at image build time — fine when you know
+// the deploy target in advance (the Traefik path always sets it). The
+// Hostinger Docker Manager path uses a prebuilt, target-agnostic image, so
+// when it's unset this falls back to "whatever host served this page, on
+// the backend's port" — works on any VPS IP without a rebuild.
+function apiBase(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== "undefined") return `${window.location.protocol}//${window.location.hostname}:47832`;
+  return "http://localhost:8000";
+}
 // Shared secret the backend checks via app.core.auth.require_api_key — not
 // Traefik basicauth, which breaks cross-origin fetch() preflight. Anyone who
 // can view this page's source (i.e. already passed the dashboard's own
-// Traefik login) can see this value; that's the intended trust boundary.
+// Traefik login, where applicable) can see this value; that's the intended
+// trust boundary. Blank means the backend also has no API_KEY set — open,
+// fine for a first "does it even boot" check, lock down after.
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
 export class ApiError extends Error {
@@ -22,13 +33,13 @@ export class ApiError extends Error {
 const authHeaders: HeadersInit = API_KEY ? { "X-API-Key": API_KEY } : {};
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store", headers: authHeaders });
+  const res = await fetch(`${apiBase()}${path}`, { cache: "no-store", headers: authHeaders });
   if (!res.ok) throw new ApiError(res.status, await res.text());
   return res.json();
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders },
     body: JSON.stringify(body),
