@@ -3,7 +3,7 @@ role: "Scout — finds real opportunities from public discussion and issue track
 system_prompt: scout_system.md
 model_capability: general
 max_steps: 4
-schedule: "every 6 hours via Celery Beat (run_scout_cycle)"
+schedule: "hourly via Celery Beat (run_scout_cycle)"
 
 skills:
   - product-research

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Agent, AgentRun, EvolutionHistory, Product
@@ -217,6 +217,33 @@ def retire_agent(db: Session, agent: Agent, *, reason: str) -> None:
         )
     )
     db.flush()
+
+
+def family_snapshot(db: Session, family: str) -> dict:
+    """Read-only view of a role family for the dashboard's Evolution arena:
+    every active variant plus its objective metrics (or None while it's
+    still under MIN_RUNS_FOR_COMPETITION) — same numbers run_role_competition
+    judges on, just without mutating anything."""
+    variants = [a for a in db.scalars(select(Agent).where(Agent.status == "active")) if agent_family(a.name) == family]
+    out = []
+    for v in variants:
+        run_count = db.scalar(select(func.count()).select_from(AgentRun).where(AgentRun.agent_id == v.id)) or 0
+        metrics = _runtime_metrics(db, v.id)
+        score = _weighted_score(metrics, AGENT_WEIGHTS)[0] if metrics else None
+        out.append(
+            {
+                "id": str(v.id),
+                "name": v.name,
+                "generation": v.generation,
+                "parent_agent_id": str(v.parent_agent_id) if v.parent_agent_id else None,
+                "run_count": run_count,
+                "runs_needed": max(0, MIN_RUNS_FOR_COMPETITION - run_count),
+                "metrics": metrics,
+                "score": score,
+            }
+        )
+    out.sort(key=lambda v: (v["score"] is None, -(v["score"] or 0)))
+    return {"family": family, "variants": out, "min_runs_for_competition": MIN_RUNS_FOR_COMPETITION}
 
 
 def run_role_competition(db: Session, config_dir: Path, family: str) -> dict:

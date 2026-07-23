@@ -20,9 +20,14 @@ celery_app.conf.update(
 # Builder/Tester/Marketing/Finance are registered as agents but stay
 # `status=paused` (see db/init.sql) until their real logic lands.
 celery_app.conf.beat_schedule = {
-    "scout-cycle-every-6-hours": {
+    # Hourly, not every 6h: the whole point of "autonomous" is that there's
+    # something to look at on the dashboard's live activity feed throughout
+    # the day, not four blips. Still bounded — context_manager.py compresses
+    # each agent's history once it exceeds SHORT_TERM_BUFFER_MAX_RUNS, so
+    # more frequent runs don't grow context unboundedly.
+    "scout-cycle-hourly": {
         "task": "app.tasks.run_scout_cycle",
-        "schedule": crontab(minute=0, hour="*/6"),
+        "schedule": crontab(minute=0),
     },
     # Judges each family's active variants on real agent_runs data (see
     # core/evolution.py) — no-ops on any family without enough runs yet, so

@@ -110,7 +110,7 @@ live to generate that data from.
    non-negotiable rules (never spam/scam/manipulate/fake metrics) and calls
    `decide_opportunity` with approved/watch/rejected + rationale.
 
-Celery Beat triggers step 1 every 6 hours; each stage chains into the next
+Celery Beat triggers step 1 every hour; each stage chains into the next
 only when there's real work. A human can also override any decision from
 the dashboard's Opportunities page — that calls the same
 `decide_opportunity` function directly, bypassing the CEO agent.
@@ -157,4 +157,13 @@ new agent.
   already use (`docker-compose.yml` has the routing/port assignment).
 - ~~**API authentication**~~ — done: backend requires `X-API-Key`
   (`app/core/auth.py`), dashboard requires HTTP Basic Auth
-  (`dashboard/middleware.ts`). See `DEPLOY.md` step 5.
+  (`dashboard/middleware.ts`), plus an optional third layer,
+  `ALLOWED_IPS` — a comma-separated IP allowlist checked before the API key,
+  for pinning access to a known static IP. See `DEPLOY.md` step 5.
+- ~~**Dashboard: activity visibility + evolution UI**~~ — done: the Overview
+  page now polls `/api/logs` every 5s into a live activity feed (with a
+  pulsing "is anything actually running right now" indicator), and the
+  Evolution page renders each competing family as a head-to-head arena
+  (`GET /api/evolution/families` / `core/evolution.family_snapshot`) instead
+  of a bare history table — two variants, their live scores, and which one
+  is currently ahead.

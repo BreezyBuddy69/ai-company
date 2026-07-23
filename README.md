@@ -47,7 +47,7 @@ Then:
 - API docs (Swagger): http://localhost:8000/docs
 - n8n: http://localhost:5678
 
-The Scout cycle runs automatically every 6 hours via Celery Beat. To trigger
+The Scout cycle runs automatically every hour via Celery Beat. To trigger
 it immediately instead of waiting:
 
 ```bash

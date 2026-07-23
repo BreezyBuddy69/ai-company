@@ -7,11 +7,20 @@ from sqlalchemy.orm import Session
 
 from app.agents.runner import resolve_agent_dirs
 from app.config import get_settings
-from app.core.evolution import run_role_competition, score_agent, score_product
+from app.core.evolution import agent_family, family_snapshot, run_role_competition, score_agent, score_product
 from app.db.models import Agent, EvolutionHistory, Product
 from app.db.session import get_db
 
 router = APIRouter(prefix="/api/evolution", tags=["evolution"])
+
+
+@router.get("/families")
+def families(db: Session = Depends(get_db)):
+    """Every role currently running at least one active agent, each with its
+    variants and their live scores — the data behind the dashboard's arena
+    view ("who's competing against whom, and who's winning")."""
+    names = sorted({agent_family(a.name) for a in db.scalars(select(Agent).where(Agent.status == "active"))})
+    return [family_snapshot(db, name) for name in names]
 
 
 @router.get("/history")

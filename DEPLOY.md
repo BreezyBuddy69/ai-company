@@ -80,6 +80,15 @@ that bundle. Rotate it by changing `API_KEY` in `.env` and rebuilding both:
 docker compose up -d --build backend dashboard
 ```
 
+**Optional third layer — IP allowlist**: if you only ever access this from
+one static IP (home/office), set `ALLOWED_IPS=<your-ip>` in `.env` (comma-
+separated for more than one) and `TRUST_PROXY_HEADERS=true` (required behind
+Traefik — otherwise the backend sees Traefik's own address, not yours, and
+locks you out). Find your IP with `curl ifconfig.me`. Skip this if your IP
+changes (most home connections do) — a wrong allowlist locks out the
+dashboard too, and `API_KEY` + `DASHBOARD_PASSWORD` are already the real
+security boundary. `docker compose up -d backend` (restart only) to apply.
+
 ## 6. Automated backups
 
 ```bash

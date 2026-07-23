@@ -1,26 +1,32 @@
-/* Tokens sourced from /DESIGN.md (Apple-inspired system) — dark subset,
-   since this is an internal always-dark ops dashboard, not a marketing site. */
+/* Claude-style palette: warm cream/beige surfaces, clay-orange accent, warm
+   ink text. Chosen over the DESIGN.md Apple-blue system for this ops
+   dashboard per explicit request — this file, not DESIGN.md, is the source
+   of truth for ai-company/dashboard's tokens. */
 :root {
-  --primary: #0066cc;
-  --primary-on-dark: #2997ff;
-  --body-on-dark: #ffffff;
-  --body-muted: #cccccc;
-  --ink-muted-48: #7a7a7a;
-  --surface-black: #000000;
-  --surface-tile-1: #272729;
-  --surface-tile-2: #2a2a2c;
-  --surface-tile-3: #252527;
-  --hairline-on-dark: rgba(255, 255, 255, 0.12);
+  --cream: #faf7f2;
+  --beige: #f0ead9;
+  --beige-soft: #e8e1d0;
+  --white: #ffffff;
+  --orange: #d97757;
+  --orange-dark: #c15f3c;
+  --orange-soft: rgba(217, 119, 87, 0.14);
+  --ink: #262624;
+  --ink-muted: #6b6a66;
+  --ink-faint: #a3a196;
+  --hairline: rgba(38, 38, 36, 0.1);
 
-  --success: #30d158;
-  --warning: #ffd60a;
-  --danger: #ff453a;
+  --success: #2f9e44;
+  --success-soft: rgba(47, 158, 68, 0.14);
+  --warning: #b8860b;
+  --warning-soft: rgba(184, 134, 11, 0.14);
+  --danger: #c1443a;
+  --danger-soft: rgba(193, 68, 58, 0.14);
 
-  --font-display: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-text: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: "Georgia", "Iowan Old Style", "Palatino Linotype", serif;
+  --font-text: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 
   --radius-sm: 8px;
-  --radius-md: 11px;
+  --radius-md: 12px;
   --radius-lg: 18px;
   --radius-pill: 9999px;
 
@@ -41,14 +47,14 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--surface-black);
-  color: var(--body-on-dark);
+  background: var(--cream);
+  color: var(--ink);
   font-family: var(--font-text);
-  letter-spacing: -0.011em;
+  letter-spacing: -0.006em;
 }
 
 a {
-  color: var(--primary-on-dark);
+  color: var(--orange-dark);
   text-decoration: none;
 }
 a:hover {
@@ -62,6 +68,7 @@ h3 {
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0 0 var(--space-sm) 0;
+  color: var(--ink);
 }
 
 button {
@@ -79,6 +86,6 @@ table {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--surface-tile-2);
+  background: var(--beige-soft);
   border-radius: var(--radius-pill);
 }

@@ -94,6 +94,12 @@ export interface Overview {
   model_success_rate_pct: number | null;
   total_model_calls: number;
   spend_usd: number;
+  agent_runs_today: number;
+  last_run_at: string | null;
+  opportunities_by_status: Record<string, number>;
+  evolution_clones_total: number;
+  evolution_retirees_total: number;
+  active_families: string[];
 }
 
 export interface EvolutionEntry {
@@ -106,4 +112,28 @@ export interface EvolutionEntry {
   parent_id: string | null;
   mutation_notes: string | null;
   created_at: string;
+}
+
+export interface VariantMetrics {
+  success_rate: number;
+  speed: number;
+  cost: number;
+  quality: number;
+}
+
+export interface FamilyVariant {
+  id: string;
+  name: string;
+  generation: number;
+  parent_agent_id: string | null;
+  run_count: number;
+  runs_needed: number;
+  metrics: VariantMetrics | null;
+  score: number | null;
+}
+
+export interface FamilySnapshot {
+  family: string;
+  variants: FamilyVariant[];
+  min_runs_for_competition: number;
 }

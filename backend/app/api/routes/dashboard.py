@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Agent, AgentRun, ModelUsageLog, Opportunity
+from app.core.evolution import agent_family
+from app.db.models import Agent, AgentRun, EvolutionHistory, ModelUsageLog, Opportunity
 from app.db.session import get_db
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
@@ -23,12 +24,31 @@ def overview(db: Session = Depends(get_db)):
     ) or 0
     model_success_rate = round((successful_calls / total_calls) * 100, 1) if total_calls else None
 
+    runs_today = db.scalar(select(func.count()).select_from(AgentRun).where(AgentRun.created_at >= since)) or 0
+    last_run_at = db.scalar(select(func.max(AgentRun.created_at)))
+    opportunities_by_status = dict(
+        db.execute(select(Opportunity.status, func.count()).group_by(Opportunity.status)).all()
+    )
+    clones_total = db.scalar(
+        select(func.count()).select_from(EvolutionHistory).where(EvolutionHistory.mutation_notes.ilike("cloned from%"))
+    ) or 0
+    retirees_total = db.scalar(
+        select(func.count()).select_from(EvolutionHistory).where(EvolutionHistory.mutation_notes.ilike("retired:%"))
+    ) or 0
+    families = sorted({agent_family(a.name) for a in db.scalars(select(Agent).where(Agent.status == "active"))})
+
     return {
         "active_agents": active_agents,
         "opportunities_last_24h": opportunities_today,
         "model_success_rate_pct": model_success_rate,
         "total_model_calls": total_calls,
         "spend_usd": 0.0,  # free-first router enforces this; see model_registry.yaml
+        "agent_runs_today": runs_today,
+        "last_run_at": last_run_at.isoformat() if last_run_at else None,
+        "opportunities_by_status": opportunities_by_status,
+        "evolution_clones_total": clones_total,
+        "evolution_retirees_total": retirees_total,
+        "active_families": families,
     }
 
 

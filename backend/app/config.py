@@ -14,6 +14,17 @@ class Settings(BaseSettings):
     # --- Edge auth ---
     # Shared secret the dashboard sends as X-API-Key. Empty = open (local dev).
     api_key: str = ""
+    # Comma-separated IP allowlist, checked in app.core.auth on top of the
+    # API key (defense in depth: even a leaked key is useless from an
+    # unrecognized IP). Empty = no IP restriction. Behind a reverse proxy
+    # (Traefik/Hostinger), set trust_proxy_headers so the real client IP is
+    # read from X-Forwarded-For instead of the proxy's own address.
+    allowed_ips: str = ""
+    trust_proxy_headers: bool = False
+
+    @property
+    def allowed_ip_list(self) -> list[str]:
+        return [ip.strip() for ip in self.allowed_ips.split(",") if ip.strip()]
 
     # --- Model router ---
     openrouter_api_key: str = ""
