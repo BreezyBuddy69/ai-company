@@ -1,4 +1,4 @@
-# Architecture — Autonomous AI Software Factory (v1)
+# Architecture — Anvil (v1)
 
 v1 scope: the full infrastructure foundation + one real, working agent loop
 (Scout → Research → CEO). See "Deliberately not in v1" at the bottom for
@@ -113,6 +113,10 @@ live to generate that data from.
 3. **CEO** reviews researched opportunities against the company's
    non-negotiable rules (never spam/scam/manipulate/fake metrics) and calls
    `decide_opportunity` with approved/watch/rejected + rationale.
+4. **Product** picks up each newly-approved opportunity and calls
+   `create_product` with an MVP spec (core features, roadmap, pricing,
+   validation plan) — a real `products` row, not just a memory note. Runs
+   automatically right after every CEO review (`run_product_cycle`).
 
 Celery Beat triggers step 1 every hour; each stage chains into the next
 only when there's real work. A human can also override any decision from
@@ -141,11 +145,15 @@ new agent.
 
 ## Deliberately not in v1
 
-- **Product/Builder/Tester/Marketing/Finance real logic** — registered as
-  agents with config+prompt stubs and `status=paused`, but not wired into
-  the Celery schedule. Their prompts say so explicitly if manually
-  triggered. Phase 2: wire Product to fire when an opportunity is
-  `approved`, Builder when Product finishes a spec, etc.
+- ~~**Product real logic**~~ — done: wired into the automatic pipeline (see
+  above), `EVOLVING_FAMILIES` now includes it, and it has a real tool
+  (`create_product`) instead of a memory-only stub.
+- **Builder/Tester/Marketing/Finance real logic** — still registered as
+  agents with config+prompt stubs and `status=paused`. Deliberately not
+  built yet: Builder in particular implies real external side effects
+  (pushing code somewhere, most likely a new GitHub repo per product) that
+  need their own scoping conversation, not a default. Their prompts say so
+  explicitly if manually triggered.
 - **Stripe/PayPal integration** — `finance_transactions` table and
   `/api/finance/summary` exist; nothing writes to that table yet because
   there's no product generating real transactions yet.

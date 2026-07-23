@@ -197,6 +197,8 @@ class Agent:
             call_kwargs["discovered_by_agent_id"] = agent_row.id
         if "source_agent_id" in sig.parameters and "source_agent_id" not in args:
             call_kwargs["source_agent_id"] = agent_row.id
+        if "created_by_agent_id" in sig.parameters and "created_by_agent_id" not in args:
+            call_kwargs["created_by_agent_id"] = agent_row.id
         output = func(**call_kwargs)
         db.commit()
         return output

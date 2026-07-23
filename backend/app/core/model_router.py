@@ -167,7 +167,7 @@ class ModelRouter:
                 headers={
                     "Authorization": f"Bearer {self.settings.openrouter_api_key}",
                     "HTTP-Referer": "https://localhost",
-                    "X-Title": "Autonomous AI Software Factory",
+                    "X-Title": "Anvil",
                 },
                 json={
                     "model": model.name,

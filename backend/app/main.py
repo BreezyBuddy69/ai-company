@@ -12,7 +12,7 @@ settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 app = FastAPI(
-    title="Autonomous AI Software Factory",
+    title="Anvil",
     description="Internal control plane for the agent company — v1 (foundation + CEO/Scout/Research loop).",
     version="0.1.0",
 )

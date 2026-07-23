@@ -1,6 +1,6 @@
-# Autonomous AI Software Factory — v1
+# Anvil — v1
 
-An autonomous AI company that runs on a single Ubuntu VPS: it finds real
+Anvil is an autonomous AI company that runs on a single Ubuntu VPS: it finds real
 customer problems, validates them, and (starting from v1) decides whether
 they're worth building — powered entirely by free OpenRouter models. See
 `ARCHITECTURE.md` for the full design and `DEPLOY.md` for going live on a
@@ -8,19 +8,25 @@ real VPS. This document is the fast path to running it.
 
 ## What's actually running in v1
 
-A working **Scout → Research → CEO** loop:
+A working **Scout → Research → CEO → Product** loop:
 
-1. **Scout** searches Hacker News + GitHub Issues (both free, keyless) for
-   pain-point keywords and records credible findings as opportunities.
+1. **Scout** searches Hacker News, GitHub Issues, and Reddit (all free,
+   keyless) for pain-point keywords and records credible findings as
+   opportunities.
 2. **Research** skeptically scores each opportunity (demand, competition,
    pricing).
 3. **CEO** approves/watches/rejects each researched opportunity with a
    rationale, respecting the company's non-negotiable rules (never spam,
    scam, manipulate, or fake metrics).
+4. **Product** turns each approved opportunity into a real MVP spec
+   (features, roadmap, pricing, validation plan).
 
-Everything is visible and human-overridable from the dashboard. Five more
-agents (Product, Builder, Tester, Marketing, Finance) are registered and
-config-ready but intentionally stubbed — see `ARCHITECTURE.md`.
+Every role above runs two competing variants at a time (see `ARCHITECTURE.md`
+"Evolution engine") — the loser gets retired, the winner cloned, daily.
+Everything is visible and human-overridable from the dashboard, including
+manually triggering any agent or activating a paused one. Four more agents
+(Builder, Tester, Marketing, Finance) are registered and config-ready but
+intentionally stubbed — see `ARCHITECTURE.md`.
 
 ## Quickstart
 

@@ -15,7 +15,7 @@ export function Nav() {
   const pathname = usePathname();
   return (
     <nav className="nav">
-      <span className="nav-brand">AI Software Factory</span>
+      <span className="nav-brand">Anvil</span>
       {LINKS.map((link) => (
         <Link
           key={link.href}

@@ -2,8 +2,8 @@ name: product
 role: "Product — turns an approved opportunity into an MVP spec, roadmap, and pricing plan"
 system_prompt: product_system.md
 model_capability: general
-max_steps: 3
-schedule: "not yet scheduled — v2: triggered when an opportunity is decided 'approved'"
+max_steps: 4
+schedule: "triggered after run_ceo_review via Celery (run_product_cycle)"
 
 skills:
   - startup-validation
@@ -11,6 +11,7 @@ skills:
 
 tools:
   - read_opportunities
+  - create_product
   - write_memory
 
 permissions:

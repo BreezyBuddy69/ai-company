@@ -4,7 +4,7 @@ import "./globals.css";
 import "./dashboard.css";
 
 export const metadata: Metadata = {
-  title: "AI Software Factory — Control Plane",
+  title: "Anvil — Control Plane",
   description: "Private dashboard for the autonomous AI software company.",
 };
 

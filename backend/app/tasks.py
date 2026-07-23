@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy import select
+
 from app.celery_app import celery_app
 from app.config import get_settings
 from app.core.tools import read_opportunities
@@ -18,7 +20,7 @@ logger = logging.getLogger("tasks")
 
 # Every scheduled family competing under core/evolution.py's clone/retire
 # cycle. Add a role here once it moves off `status=paused` in db/init.sql.
-EVOLVING_FAMILIES = ("scout", "research", "ceo")
+EVOLVING_FAMILIES = ("scout", "research", "ceo", "product")
 
 
 def _active_variants(family: str) -> list[str]:
@@ -103,7 +105,43 @@ def run_ceo_review() -> dict:
     results = []
     for variant in _active_variants("ceo"):
         results.append(run_agent_task.run(agent_name=variant, goal=goal, task_type="ceo_review"))
+    run_product_cycle.delay()
     return {"results": results}
+
+
+@celery_app.task(name="app.tasks.run_product_cycle")
+def run_product_cycle() -> dict:
+    """Phase 2 from ARCHITECTURE.md, now wired: fires after every CEO review,
+    turns each approved-but-not-yet-specced opportunity into a real Product
+    row via create_product. No-ops cheaply if nothing new was approved."""
+    from app.db.models import Product
+
+    db = SessionLocal()
+    try:
+        specced_opportunity_ids = {p.opportunity_id for p in db.scalars(select(Product)) if p.opportunity_id}
+        ids = [
+            str(o.id)
+            for o in read_opportunities(db, status="approved", limit=20)
+            if o.id not in specced_opportunity_ids
+        ]
+    finally:
+        db.close()
+
+    variants = _active_variants("product")
+    specced = 0
+    for opp_id in ids:
+        goal = (
+            f"The opportunity with id {opp_id} was approved (use read_opportunities to see its details). "
+            "Define an MVP: core features, a rough roadmap, a pricing approach, and a validation plan. Then "
+            "call create_product with a name, spec, and pricing capturing all of that."
+        )
+        for variant in variants:
+            try:
+                run_agent_task.run(agent_name=variant, goal=goal, task_type="product_spec")
+                specced += 1
+            except Exception:
+                logger.exception("product cycle failed for opportunity %s variant %s", opp_id, variant)
+    return {"specced": specced, "variants": variants}
 
 
 @celery_app.task(name="app.tasks.run_evolution_cycle")

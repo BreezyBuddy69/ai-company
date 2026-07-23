@@ -36,6 +36,13 @@ class RunAgentIn(BaseModel):
     task_type: str | None = None
 
 
+class SetStatusIn(BaseModel):
+    status: str
+
+
+VALID_STATUSES = {"active", "paused", "archived"}
+
+
 @router.get("", response_model=list[AgentDetailOut])
 def list_agents(db: Session = Depends(get_db)):
     """Includes run counts + last_run_at per agent — the Agents page's only
@@ -94,6 +101,22 @@ def trigger_agent(name: str, body: RunAgentIn, db: Session = Depends(get_db)):
     except Exception as exc:  # model failures, tool errors etc. surface as 502
         raise HTTPException(502, f"agent run failed: {exc}") from exc
     return {"agent": name, "result": result}
+
+
+@router.patch("/{name}/status")
+def set_agent_status(name: str, body: SetStatusIn, db: Session = Depends(get_db)):
+    """Flips an agent's active/paused/archived state — the dashboard's
+    Activate/Pause button. Exists because db/init.sql only seeds initial
+    status once, on an empty volume; an already-running deploy has no other
+    way to turn a role on without this."""
+    if body.status not in VALID_STATUSES:
+        raise HTTPException(400, f"status must be one of {sorted(VALID_STATUSES)}")
+    agent = db.scalar(select(Agent).where(Agent.name == name))
+    if not agent:
+        raise HTTPException(404, f"unknown agent '{name}'")
+    agent.status = body.status
+    db.commit()
+    return {"name": name, "status": agent.status}
 
 
 @router.get("/{name}/config")

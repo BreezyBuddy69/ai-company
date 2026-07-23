@@ -154,6 +154,38 @@ def create_opportunity(
     return opp
 
 
+def create_product(
+    db: Session,
+    *,
+    opportunity_id: uuid.UUID,
+    name: str,
+    spec: dict[str, Any],
+    pricing: dict[str, Any] | None = None,
+    created_by_agent_id: uuid.UUID | None,
+) -> Product:
+    """Turns an approved opportunity into a real Product row — spec holds
+    core_features/roadmap/validation_plan as the Product agent writes them.
+    created_by_agent_id is what evolution.py's record_revenue clone-on-first-
+    revenue hook keys off later."""
+    product = Product(
+        opportunity_id=opportunity_id,
+        name=name,
+        spec=spec,
+        pricing=pricing or {},
+        created_by_agent_id=created_by_agent_id,
+    )
+    db.add(product)
+    db.flush()
+    write_memory(
+        db,
+        content=f"Product spec created: {name} (from opportunity {opportunity_id})",
+        memory_type="decision",
+        source_agent_id=created_by_agent_id,
+        metadata={"product_id": str(product.id)},
+    )
+    return product
+
+
 def read_opportunities(db: Session, *, status: str | None = None, limit: int = 20) -> list[Opportunity]:
     stmt = select(Opportunity).order_by(Opportunity.created_at.desc()).limit(limit)
     if status:
@@ -230,6 +262,7 @@ TOOL_REGISTRY = {
     "scrape_url": scrape_url,
     "write_memory": write_memory,
     "create_opportunity": create_opportunity,
+    "create_product": create_product,
     "read_opportunities": read_opportunities,
     "score_opportunity": score_opportunity,
     "decide_opportunity": decide_opportunity,
@@ -264,6 +297,15 @@ TOOL_DESCRIPTIONS = {
             "problem": "string", "target_customer": "string", "existing_solutions": "string[]",
             "pain_level": "int 1-10", "possible_product": "string", "revenue_potential": "string",
             "source": "string", "source_url": "string",
+        },
+    },
+    "create_product": {
+        "description": "Turn an approved opportunity into a real product spec.",
+        "args": {
+            "opportunity_id": "uuid",
+            "name": "string",
+            "spec": "object: {core_features: string[], roadmap: string, validation_plan: string}",
+            "pricing": "object (optional): {model: string, price_usd_month: number, notes: string}",
         },
     },
     "read_opportunities": {

@@ -203,7 +203,7 @@ INSERT INTO agents (name, role, config_path, status) VALUES
     ('ceo', 'CEO Brain — strategy, priorities, resource allocation', 'agents/configs/ceo.yaml', 'active'),
     ('scout', 'Scout — finds real-world opportunities', 'agents/configs/scout.yaml', 'active'),
     ('research', 'Research — validates and ranks opportunities', 'agents/configs/research.yaml', 'active'),
-    ('product', 'Product — MVP specs, roadmap, pricing', 'agents/configs/product.yaml', 'paused'),
+    ('product', 'Product — MVP specs, roadmap, pricing', 'agents/configs/product.yaml', 'active'),
     ('builder', 'Builder — ships websites/SaaS/APIs', 'agents/configs/builder.yaml', 'paused'),
     ('tester', 'Tester — bugs, security, usability, performance', 'agents/configs/tester.yaml', 'paused'),
     ('marketing', 'Marketing — SEO, landing pages, acquisition', 'agents/configs/marketing.yaml', 'paused'),
