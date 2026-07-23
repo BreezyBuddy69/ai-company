@@ -47,6 +47,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
+      BROWSERLESS_URL: http://browserless:3000
+      BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN:-}
     volumes:
       # Shared with celery_worker so an agent cloned by core/evolution.py is
       # visible to a manual /api/agents/{name}/run call too.
@@ -66,11 +68,13 @@ services:
       dockerfile: backend/Dockerfile
     container_name: factory-celery-worker-local
     restart: unless-stopped
-    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=4"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
+      BROWSERLESS_URL: http://browserless:3000
+      BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN:-}
     volumes:
       - agent_configs_local:/agents/configs
     depends_on:
@@ -78,7 +82,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    mem_limit: 384m
+    mem_limit: 512m
 
   celery_beat:
     build:
@@ -129,6 +133,21 @@ services:
     ports:
       - "5678:5678"
     mem_limit: 256m
+
+  browserless:
+    # Opt-in, like docker-compose.yml: `docker compose -f docker-compose.local.yml
+    # --profile browserless up -d` once BROWSERLESS_TOKEN is set in .env.
+    image: ghcr.io/browserless/chromium:latest
+    container_name: factory-browserless-local
+    restart: unless-stopped
+    profiles: ["browserless"]
+    environment:
+      TOKEN: ${BROWSERLESS_TOKEN:-}
+      MAX_CONCURRENT_SESSIONS: "2"
+      TIMEOUT: "60000"
+    ports:
+      - "47834:3000"
+    mem_limit: 1024m
 
 volumes:
   postgres_data_local:

@@ -49,7 +49,7 @@ def run_scout_cycle() -> dict:
     processed = 0
     for keyword in settings.scout_keyword_list:
         goal = (
-            f"Search Hacker News and GitHub issues for the keyword '{keyword}' to find one real, "
+            f"Search Hacker News, GitHub issues, and Reddit for the keyword '{keyword}' to find one real, "
             "underserved customer pain point that could become a product. If you find a credible one, "
             "call create_opportunity with what you found, citing the source URL. If nothing credible "
             "turns up, just finish."

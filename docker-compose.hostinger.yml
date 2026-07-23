@@ -8,7 +8,8 @@
 #     Those packages must be public (Package settings -> Change visibility)
 #     or Docker Manager can't pull them without registry credentials.
 #   - No Traefik network/labels/HTTPS — reachable directly at
-#     http://<VPS_IP>:47831 (dashboard) and http://<VPS_IP>:47832 (API).
+#     http://<VPS_IP>:47831 (dashboard), http://<VPS_IP>:47832 (API), and
+#     http://<VPS_IP>:47834 (browserless — headless Chrome for n8n/Scout).
 #     Put Traefik/HTTPS in front only once this works over plain HTTP.
 #   - All secrets are placeholders below, not read from a .env file (Docker
 #     Manager deploys from this single file) — edit them before/at deploy
@@ -68,6 +69,8 @@ services:
       # Optional edge auth (blank = open). Set once you've confirmed the
       # stack boots, then redeploy both backend and dashboard.
       API_KEY: ""
+      BROWSERLESS_URL: http://browserless:3000
+      BROWSERLESS_TOKEN: ""
     volumes:
       # Shared across backend/celery_worker/celery_beat so an agent cloned
       # by core/evolution.py (see docker-compose.yml's comment) is visible
@@ -85,17 +88,19 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=4"]
     environment:
       DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
       REDIS_URL: redis://redis:6379/0
       OPENROUTER_API_KEY: ""
+      BROWSERLESS_URL: http://browserless:3000
+      BROWSERLESS_TOKEN: ""
     volumes:
       - agent_configs:/agents/configs
     depends_on:
       - postgres
       - redis
-    mem_limit: 384m
+    mem_limit: 512m
 
   celery_beat:
     image: ghcr.io/breezybuddy69/ai-company-backend:latest
@@ -146,6 +151,23 @@ services:
     ports:
       - "47833:5678"
     mem_limit: 256m
+
+  # Optional — Docker Manager has no --profile flag, so delete this whole
+  # block if you don't want headless Chrome running at all.
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    restart: unless-stopped
+    networks:
+      - internal
+    environment:
+      # Auth gate — anyone reaching 47834 without this token can drive your
+      # headless Chrome. Set a real value before exposing this port.
+      TOKEN: "CHANGE_ME_STRONG_TOKEN"
+      MAX_CONCURRENT_SESSIONS: "2"
+      TIMEOUT: "60000"
+    ports:
+      - "47834:3000"
+    mem_limit: 1024m
 
 networks:
   internal:

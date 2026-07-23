@@ -12,6 +12,8 @@ skills:
 tools:
   - search_hackernews
   - search_github_issues
+  - search_reddit
+  - scrape_url
   - create_opportunity
   - write_memory
 

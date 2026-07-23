@@ -1,5 +1,7 @@
-# Resource-conscious stack for the shared Hostinger VPS (halovisionai.cloud).
-# Total mem_limit budget across all services stays under ~2GB — no
+# Resource-conscious stack for the shared Hostinger VPS (halovisionai.cloud,
+# 8GB RAM / 2 vCPU total, shared with every other site in this repo).
+# Total mem_limit budget across all services stays under ~3.2GB — leaves
+# comfortable headroom for the other sites on the same box. No
 # Prometheus/Grafana in v1 (see ARCHITECTURE.md "Deliberately not in v1");
 # health + structured logs cover monitoring for now.
 #
@@ -11,9 +13,10 @@
 # dashboard/middleware.ts; backend: X-API-Key, see app/core/auth.py), but no
 # host port anyway since Traefik is the only intended path in. n8n keeps its
 # direct port (47833) since N8N_BASIC_AUTH_ACTIVE gates it either way.
-#   https://factory.halovisionai.cloud      -> dashboard
-#   https://factory-api.halovisionai.cloud  -> backend API
+#   https://factory.halovisionai.cloud             -> dashboard
+#   https://factory-api.halovisionai.cloud         -> backend API
 #   47833 / https://factory-n8n.halovisionai.cloud -> n8n
+#   https://factory-browserless.halovisionai.cloud -> headless Chrome (for n8n / Scout scraping)
 # Postgres/Redis/Celery are internal-only — no host port, no Traefik label,
 # on purpose: nothing external should ever reach them directly.
 #
@@ -70,6 +73,8 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
       API_KEY: ${API_KEY:?set API_KEY in .env}
+      BROWSERLESS_URL: http://browserless:3000
+      BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN:-}
     volumes:
       # Shared with celery_worker/celery_beat so an agent cloned by
       # core/evolution.py (written by whichever container runs the
@@ -107,11 +112,17 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    # Concurrency 4, up from 2 — this VPS has real headroom (8GB/2vCPU, ~25%
+    # RAM / ~17% CPU used across every site sharing the box). These tasks are
+    # I/O-bound (HTTP calls to OpenRouter/HN/Reddit/GitHub), not CPU-heavy,
+    # so 4 concurrent agent runs is safe within the mem_limit below.
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=4"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-factory}:${POSTGRES_PASSWORD:-factory}@postgres:5432/${POSTGRES_DB:-factory}
       REDIS_URL: redis://redis:6379/0
+      BROWSERLESS_URL: http://browserless:3000
+      BROWSERLESS_TOKEN: ${BROWSERLESS_TOKEN:-}
     volumes:
       - agent_configs:/agents/configs
     depends_on:
@@ -119,7 +130,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    mem_limit: 384m
+    mem_limit: 512m
 
   celery_beat:
     build:
@@ -214,6 +225,47 @@ services:
       # Separate instance from the existing n8n.halovisionai.cloud (that one
       # is Sable2's — see Sable2/ONLINE-SETUP.md). This n8n is dedicated to
       # ai-company automations and has its own data volume (n8n_data below).
+
+  browserless:
+    # Self-hosted headless Chrome — free JS-rendering/scraping for anything
+    # that plain httpx can't reach (bot-walled or JS-only pages). Two
+    # consumers: n8n (call it directly, see DEPLOY.md) and the Scout agent's
+    # scrape_url tool (core/tools.py), gated behind the same TOKEN either way.
+    #
+    # Opt-in: `profiles` means plain `docker compose up -d` never starts this
+    # — run `docker compose --profile browserless up -d` (or set
+    # COMPOSE_PROFILES=browserless in .env) once BROWSERLESS_TOKEN is set.
+    # BEFORE doing that on the real VPS: this gets a public Traefik
+    # subdomain, and an empty token likely means an open, unauthenticated
+    # headless browser on the internet — verify with
+    # `curl -I https://factory-browserless.halovisionai.cloud/content`
+    # returns 401 before trusting it, not just that it boots.
+    image: ghcr.io/browserless/chromium:latest
+    container_name: factory-browserless
+    restart: unless-stopped
+    profiles: ["browserless"]
+    networks:
+      - internal
+      - traefik-proxy
+    environment:
+      TOKEN: ${BROWSERLESS_TOKEN:-}
+      # Hard cap on concurrent Chrome sessions — the actual memory guard.
+      # Each session is realistically 300-500MB; 2 sessions keeps this
+      # container's real usage well inside mem_limit even at peak.
+      MAX_CONCURRENT_SESSIONS: "2"
+      TIMEOUT: "60000"
+    mem_limit: 1024m
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.routers.factory-browserless.rule=Host(`factory-browserless.halovisionai.cloud`)
+      - traefik.http.routers.factory-browserless.entrypoints=websecure
+      - traefik.http.routers.factory-browserless.tls=true
+      - traefik.http.routers.factory-browserless.tls.certresolver=letsencrypt
+      - traefik.http.services.factory-browserless.loadbalancer.server.port=3000
+      # No basicauth label: browserless enforces its own TOKEN check on every
+      # request (see DEPLOY.md) — same "app-level auth, not Traefik" pattern
+      # as backend's X-API-Key.
 
 networks:
   internal:

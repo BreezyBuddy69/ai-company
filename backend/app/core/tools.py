@@ -2,16 +2,19 @@
 it's permitted to call (`tools:` in its YAML) — the agent runner refuses to
 execute anything not on that list.
 
-Two tools hit real, free, keyless public APIs:
+Three tools hit real, free, keyless public APIs:
   - search_hackernews: Algolia HN Search API (no key required)
   - search_github_issues: GitHub REST search API (works unauthenticated at a
     lower rate limit; set GITHUB_TOKEN in .env for the higher limit)
+  - search_reddit: Reddit's public search.json endpoint (no key, no auth —
+    just needs a real User-Agent or Reddit 429s the request)
 
 The rest read/write our own database.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -25,6 +28,7 @@ from app.db.models import Agent, FinanceTransaction, Opportunity, Product
 
 HN_SEARCH_URL = "https://hn.algolia.com/api/v1/search"
 GITHUB_SEARCH_URL = "https://api.github.com/search/issues"
+REDDIT_SEARCH_URL = "https://www.reddit.com/search.json"
 
 
 def search_hackernews(keyword: str, *, hits_per_page: int = 10) -> list[dict[str, Any]]:
@@ -68,6 +72,50 @@ def search_github_issues(keyword: str, *, per_page: int = 10) -> list[dict[str, 
         }
         for it in items
     ]
+
+
+def search_reddit(keyword: str, *, limit: int = 10) -> list[dict[str, Any]]:
+    params = {"q": keyword, "sort": "relevance", "limit": limit, "t": "month"}
+    headers = {"User-Agent": "ai-company-scout/1.0 (opportunity research bot)"}
+    with httpx.Client(timeout=15) as client:
+        resp = client.get(REDDIT_SEARCH_URL, params=params, headers=headers)
+    resp.raise_for_status()
+    children = resp.json().get("data", {}).get("children", [])
+    return [
+        {
+            "title": c["data"].get("title"),
+            "url": f"https://reddit.com{c['data'].get('permalink', '')}",
+            "score": c["data"].get("score", 0),
+            "num_comments": c["data"].get("num_comments", 0),
+            "subreddit": c["data"].get("subreddit"),
+            "created_at": c["data"].get("created_utc"),
+            "source": "reddit",
+        }
+        for c in children
+        if c.get("data", {}).get("title")
+    ]
+
+
+def scrape_url(url: str, *, max_chars: int = 4000) -> dict[str, Any]:
+    """Fully-rendered page text via self-hosted Browserless — for JS-only or
+    bot-walled pages plain httpx can't read (search_hackernews/github/reddit
+    above all hit plain JSON APIs and never need this). Requires
+    BROWSERLESS_URL/BROWSERLESS_TOKEN configured (docker-compose.yml's
+    browserless service) — raises clearly rather than silently no-op'ing if
+    it isn't."""
+    settings = get_settings()
+    if not settings.browserless_token:
+        raise ValueError("BROWSERLESS_TOKEN not configured — scrape_url needs a running browserless instance")
+    with httpx.Client(timeout=30) as client:
+        resp = client.post(
+            f"{settings.browserless_url}/content",
+            params={"token": settings.browserless_token},
+            json={"url": url, "gotoOptions": {"waitUntil": "networkidle2"}},
+        )
+    resp.raise_for_status()
+    text = re.sub(r"<[^>]+>", " ", resp.text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return {"url": url, "text": text[:max_chars], "truncated": len(text) > max_chars}
 
 
 def create_opportunity(
@@ -178,6 +226,8 @@ def record_revenue(db: Session, product_id: uuid.UUID, *, amount_usd: float, des
 TOOL_REGISTRY = {
     "search_hackernews": search_hackernews,
     "search_github_issues": search_github_issues,
+    "search_reddit": search_reddit,
+    "scrape_url": scrape_url,
     "write_memory": write_memory,
     "create_opportunity": create_opportunity,
     "read_opportunities": read_opportunities,
@@ -195,6 +245,14 @@ TOOL_DESCRIPTIONS = {
     "search_github_issues": {
         "description": "Search GitHub issues for a keyword. Returns issues sorted by reaction count.",
         "args": {"keyword": "string"},
+    },
+    "search_reddit": {
+        "description": "Search Reddit (last month, all subreddits) for a keyword. Returns posts with score/comment counts.",
+        "args": {"keyword": "string"},
+    },
+    "scrape_url": {
+        "description": "Fetch the fully-rendered text of a JS-heavy or bot-walled page via self-hosted headless Chrome. Only use this when a plain search result URL is worth reading in full and the other tools can't reach it.",
+        "args": {"url": "string"},
     },
     "write_memory": {
         "description": "Save a fact/decision/failure/success to long-term memory.",

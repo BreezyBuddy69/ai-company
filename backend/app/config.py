@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     github_token: str = ""
     scout_keywords: str = "expensive,manual,tedious,frustrating,workaround,spreadsheet hell,no good tool"
 
+    # --- Browserless (self-hosted headless Chrome, see docker-compose.yml) ---
+    # In-network default matches the Docker service name; blank token means
+    # the scrape_url tool raises a clear error instead of calling an
+    # unauthenticated/nonexistent instance.
+    browserless_url: str = "http://browserless:3000"
+    browserless_token: str = ""
+
     # --- Context manager ---
     short_term_buffer_max_runs: int = 8
     memory_top_k: int = 5

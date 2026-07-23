@@ -100,10 +100,14 @@ live to generate that data from.
 ## The first agent loop, concretely
 
 1. **Scout** (`agents/scout.yaml` + `prompts/scout_system.md`) searches
-   Hacker News (Algolia API, free, keyless) and GitHub Issues (free,
-   keyless — optionally higher rate limit with `GITHUB_TOKEN`) for
-   configured pain-point keywords, and calls `create_opportunity` for
-   anything credible it finds.
+   Hacker News (Algolia API, free, keyless), GitHub Issues (free,
+   keyless — optionally higher rate limit with `GITHUB_TOKEN`), and Reddit
+   (public `search.json`, free, keyless) for configured pain-point keywords,
+   and calls `create_opportunity` for anything credible it finds. For the
+   rare source that's JS-only or bot-walled and worth reading in full, it
+   also has `scrape_url` — a self-hosted headless-Chrome tool (see
+   docker-compose.yml's opt-in `browserless` service) rather than a paid
+   scraping API.
 2. **Research** re-examines each new opportunity skeptically (most should
    score 30-60, not 90+), and calls `score_opportunity`.
 3. **CEO** reviews researched opportunities against the company's

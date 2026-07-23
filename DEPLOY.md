@@ -89,6 +89,28 @@ changes (most home connections do) — a wrong allowlist locks out the
 dashboard too, and `API_KEY` + `DASHBOARD_PASSWORD` are already the real
 security boundary. `docker compose up -d backend` (restart only) to apply.
 
+## 5b. Optional: self-hosted headless Chrome (Browserless)
+
+For scraping JS-only or bot-walled pages — the existing sources
+(HN/GitHub/Reddit, see `core/tools.py`) are all plain JSON APIs and never
+need this; only add it if you have a concrete source that requires a real
+browser.
+
+```bash
+# .env: set BROWSERLESS_TOKEN=<a random string, e.g. openssl rand -hex 16>
+docker compose --profile browserless up -d
+```
+
+It's off by default (`profiles: [browserless]` in `docker-compose.yml`) so a
+plain `docker compose up -d` never starts it. Once up:
+
+- **Verify it's actually gated** before trusting it — this container gets a
+  public Traefik subdomain: `curl -I https://factory-browserless.halovisionai.cloud/content`
+  should return `401`, not `200`. If it returns 200, `BROWSERLESS_TOKEN` isn't
+  set — fix `.env` and `docker compose up -d browserless` before leaving it running.
+- **From n8n**: an HTTP Request node, `POST https://factory-browserless.halovisionai.cloud/content?token=<BROWSERLESS_TOKEN>`, JSON body `{"url": "https://example.com"}` — returns the fully-rendered HTML.
+- **From the Scout agent**: already wired as the `scrape_url` tool (`agents/configs/scout.yaml`) — it calls the in-network `http://browserless:3000` directly, no public hop needed.
+
 ## 6. Automated backups
 
 ```bash
@@ -137,6 +159,7 @@ call counts as the loop runs.
 | **ai-company dashboard** | Traefik-only, no host port | **`factory.halovisionai.cloud`** |
 | **ai-company backend** | Traefik-only, no host port | **`factory-api.halovisionai.cloud`** |
 | **ai-company n8n** | **47833** | **`factory-n8n.halovisionai.cloud`** |
+| **ai-company browserless** (opt-in) | Traefik-only, no host port | **`factory-browserless.halovisionai.cloud`** |
 | Sable2 n8n (existing, separate instance) | — | `n8n.halovisionai.cloud` |
 | seelenhafen / hydron-one / Myriam / halo4 / sable(sidequest) | Traefik-only, no host port | path-based on `halovisionai.cloud` |
 | jayden-portfolio | Traefik-only, no host port | `jayden-mikus.halovisionai.cloud` |
