@@ -36,9 +36,28 @@ class RunAgentIn(BaseModel):
     task_type: str | None = None
 
 
-@router.get("", response_model=list[AgentOut])
+@router.get("", response_model=list[AgentDetailOut])
 def list_agents(db: Session = Depends(get_db)):
-    return list(db.scalars(select(Agent).order_by(Agent.name)))
+    """Includes run counts + last_run_at per agent — the Agents page's only
+    call, so "is this thing actually doing anything" is answerable without a
+    second round-trip per row. Dataset is small (a handful of agents), so a
+    query per agent here is simpler than a join and fast enough."""
+    agents = list(db.scalars(select(Agent).order_by(Agent.name)))
+    out = []
+    for agent in agents:
+        total = db.scalar(select(func.count()).select_from(AgentRun).where(AgentRun.agent_id == agent.id)) or 0
+        ok = db.scalar(
+            select(func.count()).select_from(AgentRun).where(AgentRun.agent_id == agent.id, AgentRun.success.is_(True))
+        ) or 0
+        last_run = db.scalar(
+            select(AgentRun.created_at).where(AgentRun.agent_id == agent.id).order_by(AgentRun.created_at.desc()).limit(1)
+        )
+        out.append(
+            AgentDetailOut(
+                **AgentOut.model_validate(agent).model_dump(), total_runs=total, successful_runs=ok, last_run_at=last_run
+            )
+        )
+    return out
 
 
 @router.get("/{name}", response_model=AgentDetailOut)

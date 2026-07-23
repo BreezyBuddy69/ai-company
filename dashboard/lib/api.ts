@@ -55,6 +55,9 @@ export interface Agent {
   status: string;
   generation: number;
   created_at: string;
+  total_runs: number;
+  successful_runs: number;
+  last_run_at: string | null;
 }
 
 export interface Opportunity {
