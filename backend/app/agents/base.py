@@ -125,11 +125,11 @@ class Agent:
 
             usage_rows: list[ModelUsageLog] = []
 
-            def on_attempt(*, model_name, success, tokens_in, tokens_out, latency_ms, error, _agent_id=agent_row.id):
+            def on_attempt(*, model_name, success, tokens_in, tokens_out, latency_ms, error, cost_usd=0.0, _agent_id=agent_row.id):
                 usage_rows.append(
                     ModelUsageLog(
                         model_name=model_name, agent_id=_agent_id, tokens_in=tokens_in, tokens_out=tokens_out,
-                        latency_ms=latency_ms, success=success, error=error,
+                        latency_ms=latency_ms, success=success, error=error, cost_usd=cost_usd,
                     )
                 )
 
@@ -159,6 +159,7 @@ class Agent:
                     output={"raw": result.content}, model_used=result.model_used,
                     tokens_in=result.tokens_in, tokens_out=result.tokens_out,
                     latency_ms=result.latency_ms, success=False, error=str(exc),
+                    cost_usd=result.cost_usd,
                 ))
                 db.commit()
                 raise
@@ -170,6 +171,7 @@ class Agent:
                 agent_id=agent_row.id, task_id=task_id, input={"goal": goal, "step": step},
                 output=action, model_used=result.model_used, tokens_in=result.tokens_in,
                 tokens_out=result.tokens_out, latency_ms=result.latency_ms, success=True,
+                cost_usd=result.cost_usd,
             ))
             self.context_manager.record_activity(
                 db, task_id=task_id, agent_name=self.config.name,

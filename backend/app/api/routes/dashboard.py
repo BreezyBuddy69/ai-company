@@ -22,6 +22,7 @@ def overview(db: Session = Depends(get_db)):
     successful_calls = db.scalar(
         select(func.count()).select_from(ModelUsageLog).where(ModelUsageLog.success.is_(True))
     ) or 0
+    spend_usd = float(db.scalar(select(func.sum(ModelUsageLog.cost_usd))) or 0)
     model_success_rate = round((successful_calls / total_calls) * 100, 1) if total_calls else None
 
     runs_today = db.scalar(select(func.count()).select_from(AgentRun).where(AgentRun.created_at >= since)) or 0
@@ -42,7 +43,7 @@ def overview(db: Session = Depends(get_db)):
         "opportunities_last_24h": opportunities_today,
         "model_success_rate_pct": model_success_rate,
         "total_model_calls": total_calls,
-        "spend_usd": 0.0,  # free-first router enforces this; see model_registry.yaml
+        "spend_usd": spend_usd,
         "agent_runs_today": runs_today,
         "last_run_at": last_run_at.isoformat() if last_run_at else None,
         "opportunities_by_status": opportunities_by_status,

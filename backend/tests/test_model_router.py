@@ -5,12 +5,15 @@ import respx
 from app.core.model_router import AllModelsFailedError, ModelRouter
 
 
-def _success_response(model: str, content: str = '{"ok": true}'):
+def _success_response(model: str, content: str = '{"ok": true}', cost: float | None = None):
+    usage = {"prompt_tokens": 10, "completion_tokens": 5}
+    if cost is not None:
+        usage["cost"] = cost
     return httpx.Response(
         200,
         json={
             "choices": [{"message": {"content": content}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+            "usage": usage,
         },
     )
 
@@ -25,6 +28,31 @@ def test_uses_first_priority_free_model(registry_path):
     assert result.model_used == "model-a:free"
     assert result.tokens_in == 10
     assert result.tokens_out == 5
+
+
+@respx.mock
+def test_completion_cost_reflects_the_api_response_not_hardcoded(registry_path):
+    """Regression guard: an earlier version hardcoded cost_usd=0.0 on every
+    completion, so the ledger stayed blind even when a real (paid) charge
+    came back from OpenRouter. cost_usd must reflect usage.cost from the
+    response instead."""
+    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=_success_response("model-a:free", cost=0.00013)
+    )
+    router = ModelRouter(registry_path=registry_path)
+    result = router.complete("system", "user")
+    assert result.cost_usd == 0.00013
+
+
+@respx.mock
+def test_on_attempt_receives_the_real_cost(registry_path):
+    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+        return_value=_success_response("model-a:free", cost=0.00013)
+    )
+    router = ModelRouter(registry_path=registry_path)
+    seen = {}
+    router.complete("system", "user", on_attempt=lambda **kwargs: seen.update(kwargs))
+    assert seen["cost_usd"] == 0.00013
 
 
 @respx.mock
@@ -86,7 +114,7 @@ def test_default_registry_path_falls_back_to_real_repo_file():
     ai-company/model_registry.yaml checked into the repo, not error out."""
     router = ModelRouter()
     assert router.models, "expected the real model_registry.yaml to have loaded at least one model"
-    assert any(m.name == "openrouter/auto" for m in router.models)
+    assert any(m.name == "deepseek/deepseek-chat-v3.1:free" for m in router.models)
 
 
 def test_no_api_key_raises_immediately(registry_path, monkeypatch):

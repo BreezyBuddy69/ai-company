@@ -146,13 +146,14 @@ class ModelRouter:
                     logger.info("model %s attempt %s failed: %s", model.name, attempt, exc)
                     if on_attempt:
                         on_attempt(model_name=model.name, success=False, tokens_in=0, tokens_out=0,
-                                   latency_ms=latency_ms, error=str(exc))
+                                   latency_ms=latency_ms, error=str(exc), cost_usd=0.0)
                     continue
 
                 self._note_success(model.name)
                 if on_attempt:
                     on_attempt(model_name=model.name, success=True, tokens_in=result.tokens_in,
-                               tokens_out=result.tokens_out, latency_ms=result.latency_ms, error=None)
+                               tokens_out=result.tokens_out, latency_ms=result.latency_ms, error=None,
+                               cost_usd=result.cost_usd)
                 return result
 
             self._note_failure(model.name)
@@ -175,6 +176,11 @@ class ModelRouter:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
+                    # Ask OpenRouter for the real per-call USD cost instead of
+                    # trusting this registry's declared `cost: 0` — that field
+                    # is only a statement of intent, not a guarantee of what a
+                    # given model slug actually bills.
+                    "usage": {"include": True},
                 },
             )
         resp.raise_for_status()
@@ -188,5 +194,5 @@ class ModelRouter:
             tokens_in=usage.get("prompt_tokens", 0),
             tokens_out=usage.get("completion_tokens", 0),
             latency_ms=latency_ms,
-            cost_usd=0.0,
+            cost_usd=usage.get("cost", 0.0),
         )

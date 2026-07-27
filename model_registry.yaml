@@ -27,14 +27,12 @@ router:
   consecutive_failures_before_cooldown: 3
 
 models:
-  - name: "openrouter/auto"
-    provider: openrouter
-    display_name: "OpenRouter Auto Router (free)"
-    cost: 0
-    capability: general
-    priority: 1
-    notes: "Lets OpenRouter pick a free-eligible backing model automatically."
-
+  # No "openrouter/auto" entry: that meta-model lets OpenRouter itself pick
+  # the backing model per-request, which can be a paid one (that's exactly
+  # what burned real money here — it was tried first, always "succeeded",
+  # and every genuinely-free model below never got a chance). Only list
+  # models with an explicit ":free" slug — that suffix is an OpenRouter
+  # pricing guarantee, unlike a declared `cost: 0` on a dynamic router.
   - name: "deepseek/deepseek-chat-v3.1:free"
     provider: openrouter
     display_name: "DeepSeek V3 (free)"
