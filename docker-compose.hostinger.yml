@@ -1,31 +1,47 @@
-# Standalone deploy for Hostinger's Docker Manager (paste this file's raw
-# GitHub URL into its Compose-URL field — not the repo homepage).
+# Deploy for Hostinger's Docker Manager (paste this file's raw GitHub URL into
+# its Compose-URL field — not the repo homepage).
 #
-# Differs from docker-compose.yml (the Traefik/SSH deploy) on purpose:
-#   - No `build:` — Docker Manager only pulls, it can't build. Images are
-#     published by .github/workflows/docker-publish.yml on every push to
-#     backend/ or dashboard/: ghcr.io/breezybuddy69/ai-company-{backend,dashboard}.
-#     Those packages must be public (Package settings -> Change visibility)
-#     or Docker Manager can't pull them without registry credentials.
-#   - No Traefik network/labels/HTTPS — reachable directly at
-#     http://<VPS_IP>:47831 (dashboard), http://<VPS_IP>:47832 (API), and
-#     http://<VPS_IP>:47834 (browserless — headless Chrome for n8n/Scout).
-#     Put Traefik/HTTPS in front only once this works over plain HTTP.
-#   - All secrets are placeholders below, not read from a .env file (Docker
-#     Manager deploys from this single file) — edit them before/at deploy
-#     time in the Docker Manager UI, or in this file before pushing.
-#   - Zero auth by default (API_KEY / DASHBOARD_USER / DASHBOARD_PASSWORD all
-#     blank = open, see backend/app/core/auth.py and dashboard/middleware.ts)
-#     so you can confirm it boots before locking anything down. Set
-#     DASHBOARD_USER/PASSWORD and restart the dashboard container to gate the
-#     UI immediately (no rebuild needed — read at request time). API_KEY also
-#     needs the dashboard image rebuilt with a matching NEXT_PUBLIC_API_KEY
-#     build arg, which this prebuilt-image variant doesn't set — leave it
-#     blank here unless you switch to building your own dashboard image.
+# WHY THIS FILE NO LONGER PUBLISHES PORTS 47831-47834
+# ---------------------------------------------------
+# It used to, and that was unfixable on this host. Measured from outside on
+# 2026-07-29: ports 47831-47834 time out, and so do arbitrary unused ports
+# (12345, 54321), while 22/80/443 answer. That is a firewall DROP policy, not a
+# dead container — the old "the ports are closed so the stack isn't running"
+# reading was never supported by the evidence. Publishing a port the firewall
+# discards buys nothing and leaves headless Chrome and Postgres exposed to
+# anything already on the box.
+#
+# Traefik is already running on 80/443 (it serves n8n.halovisionai.cloud) and
+# DNS for factory.halovisionai.cloud already resolves here. So everything is
+# routed through Traefik instead, over HTTPS.
+#
+# SINGLE HOSTNAME, ON PURPOSE
+# ---------------------------
+# Dashboard and API share factory.halovisionai.cloud; /api goes to the backend,
+# everything else to the dashboard. Same-origin means:
+#   - no CORS and no fetch() preflight, which is what made Traefik basicauth
+#     unusable on the old two-hostname layout (see dashboard/lib/api.ts)
+#   - one basicauth covers the UI and the API, so the backend needs no API_KEY
+#     and nothing secret is baked into the dashboard's JS bundle
+#   - one certificate
+# /health stays unauthenticated so uptime checks and curl can prove liveness.
+#
+# BEFORE DEPLOYING, EDIT IN THE DOCKER MANAGER UI
+#   - POSTGRES_PASSWORD (3 places — postgres, backend, celery_worker, celery_beat)
+#   - OPENROUTER_API_KEY (backend + celery_worker)
+#   - BROWSERLESS_TOKEN (browserless + backend + celery_worker)
+# Never commit real values here; this file is public.
+#
+# The dashboard image must be built with
+# NEXT_PUBLIC_API_URL=https://factory.halovisionai.cloud — CI does this
+# (.github/workflows/docker-publish.yml). An image built before that change
+# falls back to `<host>:47832`, which the firewall drops, and every panel shows
+# a network error. Pull :latest, don't reuse a cached older image.
 
 services:
   postgres:
     image: ghcr.io/breezybuddy69/ai-company-postgres:latest
+    container_name: factory-postgres
     restart: unless-stopped
     networks:
       - internal
@@ -44,6 +60,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: factory-redis
     restart: unless-stopped
     networks:
       - internal
@@ -57,34 +74,59 @@ services:
 
   backend:
     image: ghcr.io/breezybuddy69/ai-company-backend:latest
+    container_name: factory-backend
     restart: unless-stopped
     networks:
       - internal
+      - traefik-proxy
     environment:
       DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
       REDIS_URL: redis://redis:6379/0
-      # Free key, no card needed: https://openrouter.ai/keys — required
-      # before any agent can actually think (empty = agents no-op).
+      # Required before any agent can think (empty = agents no-op). Set a key
+      # that has a spend limit — see docs/cost-limits.md. An unlimited key on
+      # this stack has already cost real money once.
       OPENROUTER_API_KEY: ""
-      # Optional edge auth (blank = open). Set once you've confirmed the
-      # stack boots, then redeploy both backend and dashboard.
+      # Deliberately blank: auth happens at Traefik (basicauth below), which
+      # works here because the dashboard is same-origin. Setting this without
+      # rebuilding the dashboard with a matching NEXT_PUBLIC_API_KEY is what
+      # produced the `{"detail":"missing or invalid X-API-Key"}` on every tab.
       API_KEY: ""
       BROWSERLESS_URL: http://browserless:3000
-      BROWSERLESS_TOKEN: ""
+      BROWSERLESS_TOKEN: "CHANGE_ME_STRONG_TOKEN"
     volumes:
-      # Shared across backend/celery_worker/celery_beat so an agent cloned
-      # by core/evolution.py (see docker-compose.yml's comment) is visible
-      # everywhere and survives a restart.
       - agent_configs:/agents/configs
-    ports:
-      - "47832:8000"
     depends_on:
       - postgres
       - redis
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.services.anvil-api.loadbalancer.server.port=8000
+      # /api — authenticated. Explicit priority beats the dashboard catch-all
+      # rather than relying on Traefik's rule-length tiebreak.
+      - traefik.http.routers.anvil-api.rule=Host(`factory.halovisionai.cloud`) && PathPrefix(`/api`)
+      - traefik.http.routers.anvil-api.priority=20
+      - traefik.http.routers.anvil-api.entrypoints=websecure
+      - traefik.http.routers.anvil-api.tls=true
+      - traefik.http.routers.anvil-api.tls.certresolver=letsencrypt
+      - traefik.http.routers.anvil-api.middlewares=anvil-auth
+      - traefik.http.routers.anvil-api.service=anvil-api
+      # /health — deliberately open, so liveness can be proven with a bare
+      # curl and no credentials. Returns no data about the business.
+      - traefik.http.routers.anvil-health.rule=Host(`factory.halovisionai.cloud`) && Path(`/health`)
+      - traefik.http.routers.anvil-health.priority=30
+      - traefik.http.routers.anvil-health.entrypoints=websecure
+      - traefik.http.routers.anvil-health.tls=true
+      - traefik.http.routers.anvil-health.tls.certresolver=letsencrypt
+      - traefik.http.routers.anvil-health.service=anvil-api
+      # Password is a 24-char random string, bcrypt-hashed; `$$` is compose's
+      # escape for a literal `$`. Rotate by regenerating this hash.
+      - traefik.http.middlewares.anvil-auth.basicauth.users=anvil:$$2b$$10$$e1YMp9o3YByrCJoMrLi5a.BBE4PzZXyQ6q56JUVne4McVnKgOlL3O
     mem_limit: 384m
 
   celery_worker:
     image: ghcr.io/breezybuddy69/ai-company-backend:latest
+    container_name: factory-celery-worker
     restart: unless-stopped
     networks:
       - internal
@@ -94,7 +136,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       OPENROUTER_API_KEY: ""
       BROWSERLESS_URL: http://browserless:3000
-      BROWSERLESS_TOKEN: ""
+      BROWSERLESS_TOKEN: "CHANGE_ME_STRONG_TOKEN"
     volumes:
       - agent_configs:/agents/configs
     depends_on:
@@ -104,6 +146,7 @@ services:
 
   celery_beat:
     image: ghcr.io/breezybuddy69/ai-company-backend:latest
+    container_name: factory-celery-beat
     restart: unless-stopped
     networks:
       - internal
@@ -120,60 +163,62 @@ services:
 
   dashboard:
     image: ghcr.io/breezybuddy69/ai-company-dashboard:latest
+    container_name: factory-dashboard
     restart: unless-stopped
     networks:
       - internal
+      - traefik-proxy
     environment:
-      # HTTP Basic Auth on the whole dashboard (dashboard/middleware.ts),
-      # read at request time — set these before exposing 47831 publicly.
-      # Blank = open, same as API_KEY above. No rebuild needed to rotate.
+      # Second, independent gate (dashboard/middleware.ts), read at request
+      # time so it needs no rebuild. Redundant with the Traefik basicauth
+      # above — left blank by default so you get one login prompt, not two.
       DASHBOARD_USER: ""
       DASHBOARD_PASSWORD: ""
-    ports:
-      - "47831:3000"
     depends_on:
       - backend
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.services.anvil-dash.loadbalancer.server.port=3000
+      - traefik.http.routers.anvil-dash.rule=Host(`factory.halovisionai.cloud`)
+      - traefik.http.routers.anvil-dash.priority=10
+      - traefik.http.routers.anvil-dash.entrypoints=websecure
+      - traefik.http.routers.anvil-dash.tls=true
+      - traefik.http.routers.anvil-dash.tls.certresolver=letsencrypt
+      - traefik.http.routers.anvil-dash.middlewares=anvil-auth
+      - traefik.http.routers.anvil-dash.service=anvil-dash
     mem_limit: 256m
 
-  n8n:
-    image: n8nio/n8n:latest
-    restart: unless-stopped
-    networks:
-      - internal
-    environment:
-      N8N_BASIC_AUTH_ACTIVE: "true"
-      N8N_BASIC_AUTH_USER: admin
-      N8N_BASIC_AUTH_PASSWORD: CHANGE_ME_STRONG_PASSWORD
-      N8N_PROTOCOL: http
-      GENERIC_TIMEZONE: UTC
-    volumes:
-      - n8n_data:/home/node/.n8n
-    ports:
-      - "47833:5678"
-    mem_limit: 256m
-
-  # Optional — Docker Manager has no --profile flag, so delete this whole
-  # block if you don't want headless Chrome running at all.
+  # Internal only — the backend reaches it at http://browserless:3000. Never
+  # publish this: an unauthenticated headless Chrome is a remote browser for
+  # whoever finds it.
   browserless:
     image: ghcr.io/browserless/chromium:latest
+    container_name: factory-browserless
     restart: unless-stopped
     networks:
       - internal
     environment:
-      # Auth gate — anyone reaching 47834 without this token can drive your
-      # headless Chrome. Set a real value before exposing this port.
       TOKEN: "CHANGE_ME_STRONG_TOKEN"
       MAX_CONCURRENT_SESSIONS: "2"
       TIMEOUT: "60000"
-    ports:
-      - "47834:3000"
     mem_limit: 1024m
 
 networks:
   internal:
     driver: bridge
+  # Must already exist and must be the network the running Traefik is attached
+  # to. Verify with `docker network ls` — if the live Traefik uses a different
+  # name, change it in all three places here rather than creating a second one.
+  traefik-proxy:
+    external: true
 
 volumes:
   postgres_data:
-  n8n_data:
   agent_configs:
+
+# The n8n service that used to live here is gone: n8n.halovisionai.cloud is
+# already running and is what the orchestration actually targets. Two n8n
+# instances meant 256MB and a second set of credentials for nothing. The old
+# n8n_data volume is left untouched on the host, so nothing is lost if that
+# instance did hold workflows — check it before pruning volumes.

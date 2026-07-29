@@ -114,7 +114,13 @@ def test_default_registry_path_falls_back_to_real_repo_file():
     ai-company/model_registry.yaml checked into the repo, not error out."""
     router = ModelRouter()
     assert router.models, "expected the real model_registry.yaml to have loaded at least one model"
-    assert any(m.name == "deepseek/deepseek-chat-v3.1:free" for m in router.models)
+    # Assert the invariant, not a specific slug. This used to pin
+    # "deepseek/deepseek-chat-v3.1:free", which retired and took the test with
+    # it. Free slugs rotate constantly; what must never change is that every
+    # routed model is an explicitly-free one (see model_registry.yaml's header
+    # and docs/cost-limits.md for the paid-spend incident this guards).
+    paid = [m.name for m in router.models if not m.name.endswith(":free")]
+    assert not paid, f"non-free slugs in the registry: {paid}"
 
 
 def test_no_api_key_raises_immediately(registry_path, monkeypatch):

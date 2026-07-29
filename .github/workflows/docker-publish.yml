@@ -34,6 +34,12 @@ jobs:
           - name: ai-company-dashboard
             context: ./dashboard
             dockerfile: dashboard/Dockerfile
+            # Same origin as the dashboard itself — Traefik routes /api on this
+            # host to the backend (docker-compose.hostinger.yml). Must be baked
+            # in: NEXT_PUBLIC_* is inlined into the client bundle at build time,
+            # so setting it as a container env var at deploy time does nothing.
+            build-args: |
+              NEXT_PUBLIC_API_URL=https://factory.halovisionai.cloud
           - name: ai-company-postgres
             context: ./db
             dockerfile: db/Dockerfile
@@ -50,9 +56,11 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
-          # No NEXT_PUBLIC_API_URL here on purpose: the dashboard image is
-          # meant to be deploy-target-agnostic (see dashboard/lib/api.ts
-          # apiBase() runtime fallback) so it works on any VPS IP unrebuilt.
+          # Per-image, empty for the two that take no args. The old
+          # "target-agnostic image" approach relied on apiBase()'s
+          # `<host>:47832` fallback, which is dead on this VPS — that port is
+          # firewall-dropped, so the fallback could never reach the backend.
+          build-args: ${{ matrix.build-args }}
           tags: |
             ${{ env.REGISTRY }}/breezybuddy69/${{ matrix.name }}:latest
             ${{ env.REGISTRY }}/breezybuddy69/${{ matrix.name }}:${{ github.sha }}

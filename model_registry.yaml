@@ -33,54 +33,79 @@ models:
   # and every genuinely-free model below never got a chance). Only list
   # models with an explicit ":free" slug — that suffix is an OpenRouter
   # pricing guarantee, unlike a declared `cost: 0` on a dynamic router.
-  - name: "deepseek/deepseek-chat-v3.1:free"
+  # Every slug below was live-tested against OpenRouter on 2026-07-29 and
+  # returned HTTP 200 with usage.cost == 0. The previous list (DeepSeek, Qwen
+  # 2.5, GLM-4, Kimi K2, Llama 3.3, Gemini 2.0 Flash) was ENTIRELY stale by
+  # then — all 7 slugs 404'd, so every routed call fell through the whole list
+  # and failed. That is why openrouter/auto appeared to be the only thing that
+  # worked, and why removing it in ac10896 left nothing behind it. Re-verify
+  # with `scripts/verify_models.py` before assuming this list still holds.
+  - name: "nvidia/nemotron-3-super-120b-a12b:free"
     provider: openrouter
-    display_name: "DeepSeek V3 (free)"
+    display_name: "Nemotron 3 Super 120B (free)"
     cost: 0
     capability: general
-    priority: 2
+    priority: 1
 
-  - name: "deepseek/deepseek-r1:free"
+  - name: "nvidia/nemotron-3-ultra-550b-a55b:free"
     provider: openrouter
-    display_name: "DeepSeek R1 (free, reasoning)"
+    display_name: "Nemotron 3 Ultra 550B (free, 1M ctx)"
     cost: 0
     capability: reasoning
+    priority: 2
+
+  - name: "cohere/north-mini-code:free"
+    provider: openrouter
+    display_name: "Cohere North Mini Code (free)"
+    cost: 0
+    capability: coding
     priority: 3
 
-  - name: "qwen/qwen-2.5-coder-32b-instruct:free"
+  - name: "poolside/laguna-s-2.1:free"
     provider: openrouter
-    display_name: "Qwen 2.5 Coder 32B (free)"
+    display_name: "Poolside Laguna S 2.1 (free)"
     cost: 0
     capability: coding
     priority: 4
 
-  - name: "thudm/glm-4-32b:free"
+  # Priority 5 intentionally vacant: google/gemma-4-31b-it:free was dropped
+  # after it returned "Provider returned error" on one of two probe runs.
+  # A flaky entry costs a wasted round-trip per call and makes the
+  # verify_models.py deploy gate cry wolf; the router has depth without it.
+  - name: "inclusionai/ling-3.0-flash:free"
     provider: openrouter
-    display_name: "GLM-4 32B / Air (free)"
-    cost: 0
-    capability: general
-    priority: 5
-
-  - name: "moonshotai/kimi-k2:free"
-    provider: openrouter
-    display_name: "Kimi K2 (free)"
+    display_name: "Ling 3.0 Flash (free)"
     cost: 0
     capability: general
     priority: 6
 
-  - name: "meta-llama/llama-3.3-70b-instruct:free"
+  - name: "nvidia/nemotron-3-nano-30b-a3b:free"
     provider: openrouter
-    display_name: "Llama 3.3 70B (free)"
+    display_name: "Nemotron 3 Nano 30B (free)"
     cost: 0
     capability: general
     priority: 7
 
-  - name: "google/gemini-2.0-flash-exp:free"
+  - name: "google/gemma-4-26b-a4b-it:free"
     provider: openrouter
-    display_name: "Gemini 2.0 Flash Experimental (free)"
+    display_name: "Gemma 4 26B A4B IT (free)"
     cost: 0
     capability: general
     priority: 8
+
+  - name: "nvidia/nemotron-nano-9b-v2:free"
+    provider: openrouter
+    display_name: "Nemotron Nano 9B v2 (free)"
+    cost: 0
+    capability: general
+    priority: 9
+
+  - name: "poolside/laguna-xs-2.1:free"
+    provider: openrouter
+    display_name: "Poolside Laguna XS 2.1 (free)"
+    cost: 0
+    capability: coding
+    priority: 10
 
 # Local, zero-cost embedding model (not routed through OpenRouter — runs
 # on-box via sentence-transformers). Used by core/memory.py for pgvector.
