@@ -30,13 +30,20 @@ Signature of the spend, for recognising a recurrence:
 
 Set in https://openrouter.ai/settings/keys → key → Edit → Limit.
 
-| Key | Used by | Limit | Reset |
+| Key | Used by | Limit | Verified |
 |---|---|---|---|
-| `autobus` | Hostinger VPS deploy | **revoke** — pre-`ac10896` spend, see above | — |
-| Anvil VPS (replacement) | backend + celery on VPS | $5 | weekly |
-| Buchhaltung-KI | n8n Buchhaltung workflow | $3 | weekly (already set, usage $0) |
+| `autobus` | old Hostinger VPS deploy | **revoke** — pre-`ac10896` spend, see above | — |
+| `...e3ea47` | backend + celery on VPS | $0.234 / daily | 2026-07-29, usage $0 |
+| `...99ad65` | n8n Buchhaltung workflow | $3 / weekly | 2026-07-29, usage $0 |
+| `...3cabd3` | was in `ai-company/.env` | dead — `401 User not found` | 2026-07-29 |
 
 A key with no limit set is treated as a production incident, not a todo.
+
+The $0.234/day cap on the VPS key is small enough that a repeat of the
+`openrouter/auto` incident costs pennies before it stops itself. That is the
+point — the cap is the backstop for a bug that has already happened once, not
+a budget forecast. Raise it deliberately once daily net is being tracked
+(dashboard `spend_usd`), not because a run hit the ceiling.
 
 ## Verifying a key from the CLI
 
