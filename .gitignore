@@ -9,3 +9,6 @@ node_modules/
 *.tsbuildinfo
 *.log
 backups/
+
+# electron-builder output — 78MB installer, rebuilt by `npm run dist`
+desktop/release/

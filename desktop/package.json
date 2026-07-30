@@ -1,0 +1,43 @@
+{
+  "name": "anvil-desktop",
+  "version": "1.0.0",
+  "description": "Desktop window onto the Anvil dashboard, with notifications when an agent asks you something.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "cloud.halovision.anvil",
+    "productName": "Anvil",
+    "directories": {
+      "output": "release"
+    },
+    "asar": false,
+    "npmRebuild": false,
+    "files": [
+      "main.js",
+      "setup.html",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": false,
+      "shortcutName": "Anvil",
+      "artifactName": "Anvil-Setup.exe"
+    }
+  }
+}

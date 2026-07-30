@@ -1,0 +1,91 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Anvil — Setup</title>
+<style>
+  body {
+    font: 14px system-ui, sans-serif;
+    padding: 28px;
+    color: #1d1d1f;
+  }
+  h2 { margin: 0 0 4px; font-size: 18px; }
+  p.hint { color: #86868b; font-size: 12px; margin: 0 0 20px; }
+  label { display: block; margin: 14px 0 4px; font-weight: 600; font-size: 12px; }
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid #d2d2d7;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  input:focus { outline: none; border-color: #1d1d1f; }
+  button {
+    margin-top: 22px;
+    padding: 9px 18px;
+    border: 0;
+    border-radius: 999px;
+    background: #1d1d1f;
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:disabled { background: #d2d2d7; cursor: default; }
+  #msg { margin-top: 12px; font-size: 12px; color: #86868b; min-height: 16px; }
+</style>
+
+<h2>Connect to Anvil</h2>
+<p class="hint">Stored on this PC only, in this app's own settings file.</p>
+
+<label for="url">Dashboard address</label>
+<input id="url" value="https://factory.halovisionai.cloud" />
+
+<label for="user">Username</label>
+<input id="user" value="anvil" />
+
+<label for="password">Password</label>
+<input id="password" type="password" placeholder="the basicauth password" />
+
+<button id="save">Connect</button>
+<div id="msg"></div>
+
+<script>
+  const { ipcRenderer } = require("electron");
+  const $ = (id) => document.getElementById(id);
+
+  async function save() {
+    const cfg = {
+      url: $("url").value.trim().replace(/\/$/, ""),
+      user: $("user").value.trim(),
+      password: $("password").value,
+    };
+    if (!cfg.url || !cfg.user || !cfg.password) {
+      $("msg").textContent = "Fill in all three fields.";
+      return;
+    }
+    $("save").disabled = true;
+    $("msg").textContent = "Checking…";
+
+    // Verify before saving, so a typo surfaces here rather than as a blank
+    // window later. /health is deliberately unauthenticated, so a 200 proves
+    // the address is right; the authenticated call proves the password is.
+    try {
+      const health = await fetch(cfg.url + "/health");
+      if (!health.ok) throw new Error("no Anvil at that address (HTTP " + health.status + ")");
+
+      const auth = "Basic " + btoa(cfg.user + ":" + cfg.password);
+      const q = await fetch(cfg.url + "/api/questions?status=open", { headers: { Authorization: auth } });
+      if (q.status === 401) throw new Error("wrong username or password");
+      if (!q.ok) throw new Error("server said HTTP " + q.status);
+
+      ipcRenderer.send("save-config", cfg);
+    } catch (e) {
+      $("msg").textContent = String(e.message || e);
+      $("save").disabled = false;
+    }
+  }
+
+  $("save").addEventListener("click", save);
+  $("password").addEventListener("keydown", (e) => e.key === "Enter" && save());
+</script>
