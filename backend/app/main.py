@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     agents,
+    chat,
     dashboard,
     evolution,
     finance,
@@ -71,3 +72,4 @@ app.include_router(finance.router, dependencies=protected)
 app.include_router(evolution.router, dependencies=protected)
 app.include_router(dashboard.router, dependencies=protected)
 app.include_router(questions.router, dependencies=protected)
+app.include_router(chat.router, dependencies=protected)

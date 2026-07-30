@@ -287,6 +287,9 @@
 
 /* Answer field on /questions. Same hairline/radius vocabulary as .btn so the
    two sit together in a row without looking bolted on. */
+select.input {
+  cursor: pointer;
+}
 .input {
   border: 1px solid var(--hairline);
   border-radius: var(--radius-pill);

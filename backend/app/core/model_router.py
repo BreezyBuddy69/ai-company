@@ -108,9 +108,11 @@ class ModelRouter:
 
     # -- public API -------------------------------------------------------------
 
-    def candidates(self, capability: str | None = None) -> list[ModelSpec]:
+    def candidates(self, capability: str | None = None, exclude: set[str] | None = None) -> list[ModelSpec]:
         max_cost = self.router_cfg.get("max_cost_per_1k_tokens_usd", 0.0)
         pool = [m for m in self.models if m.cost <= max_cost]
+        if exclude:
+            pool = [m for m in pool if m.name not in exclude]
         if capability:
             scoped = [m for m in pool if m.capability == capability]
             if scoped:
@@ -123,6 +125,7 @@ class ModelRouter:
         user_prompt: str,
         *,
         capability: str | None = None,
+        exclude: set[str] | None = None,
         on_attempt: AttemptCallback | None = None,
     ) -> CompletionResult:
         if not self.settings.openrouter_api_key:
@@ -132,7 +135,11 @@ class ModelRouter:
         max_retries = self.router_cfg.get("max_retries_per_model", 2)
         errors: list[str] = []
 
-        for model in self.candidates(capability):
+        # `exclude` lets a caller ask several *different* models the same thing
+        # (see api/routes/chat.py fanout). Passing it per call keeps the router
+        # shared and thread-safe — FastAPI runs sync endpoints in a threadpool,
+        # so per-instance mutation would leak between concurrent requests.
+        for model in self.candidates(capability, exclude=exclude):
             if self._is_cooling_down(model.name):
                 continue
 
