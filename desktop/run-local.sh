@@ -37,7 +37,7 @@ start() {
     > "$LOGS/backend.log" 2>&1 &
   echo "backend      -> $LOGS/backend.log"
 
-  nohup "$VENV/bin/celery" -A app.celery_app worker --loglevel=INFO --concurrency=2 \
+  nohup "$VENV/bin/celery" -A app.celery_app worker --loglevel=INFO --concurrency=6 \
     > "$LOGS/worker.log" 2>&1 &
   echo "celery worker-> $LOGS/worker.log"
 

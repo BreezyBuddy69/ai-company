@@ -130,7 +130,11 @@ services:
     restart: unless-stopped
     networks:
       - internal
-    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=4"]
+    # 8 slots, not 4. An agent run is one HTTP call and a long wait, so these
+    # are almost entirely idle — the limit that bites is the free-model rate
+    # limit, not this box. Raising it further mostly buys more 429s and more
+    # fallbacks down model_registry.yaml.
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=INFO", "--concurrency=8"]
     environment:
       DATABASE_URL: postgresql+psycopg://factory:CHANGE_ME_STRONG_PASSWORD@postgres:5432/factory
       REDIS_URL: redis://redis:6379/0
@@ -142,7 +146,7 @@ services:
     depends_on:
       - postgres
       - redis
-    mem_limit: 512m
+    mem_limit: 768m
 
   celery_beat:
     image: ghcr.io/breezybuddy69/ai-company-backend:latest

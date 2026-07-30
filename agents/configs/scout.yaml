@@ -2,7 +2,7 @@ name: scout
 role: "Scout — finds real opportunities from public discussion and issue trackers"
 system_prompt: scout_system.md
 model_capability: general
-max_steps: 4
+max_steps: 7
 schedule: "hourly via Celery Beat (run_scout_cycle)"
 
 skills:

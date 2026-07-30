@@ -47,6 +47,30 @@ class AgentExecutionError(RuntimeError):
     pass
 
 
+# A Hacker News or Reddit search returns far more than an agent needs to
+# decide its next move, and it goes into every subsequent prompt. Truncating
+# here keeps the loop affordable; the context manager compresses the buffer
+# into a summary memory once it grows past short_term_buffer_max_runs anyway.
+MAX_OBSERVATION_CHARS = 1500
+
+
+def _summarise_observation(observation) -> str:
+    """Tool output, small enough to carry forward. Lists get their length kept
+    even when the items are cut, because "found 10 results" and "found 0" lead
+    to completely different next steps."""
+    if observation is None:
+        return "(no output)"
+    try:
+        text = json.dumps(observation, default=str)
+    except (TypeError, ValueError):
+        text = str(observation)
+
+    prefix = f"{len(observation)} items: " if isinstance(observation, (list, tuple)) else ""
+    if len(text) <= MAX_OBSERVATION_CHARS:
+        return prefix + text
+    return prefix + text[:MAX_OBSERVATION_CHARS] + f"… (truncated from {len(text)} chars)"
+
+
 def _extract_json(text: str) -> dict:
     match = _JSON_BLOCK.search(text)
     if not match:
@@ -115,9 +139,27 @@ class Agent:
 
         for step in range(1, self.config.max_steps + 1):
             context = self.context_manager.build_context(db, task_id=task_id, query=goal, skills_text=skills_text)
+            remaining = self.config.max_steps - step
+            # Without this block an agent re-ran the same search every step and
+            # ended on "did not finish within N steps" — it could see the
+            # results in Recent activity but was never told they were its own,
+            # that repeating was pointless, or that steps were finite.
+            budget_note = (
+                f"## Step {step} of {self.config.max_steps} ({remaining} left after this one)\n"
+                "The observations under Recent activity are results YOU already fetched. Do not "
+                "repeat a search you have already run — it will return the same thing again.\n"
+                + (
+                    "You are out of steps after this one. Act on what you already have: call the "
+                    "tool that records your finding, or call finish.\n"
+                    if remaining <= 1
+                    else "As soon as you have enough to act, use the tool that records the result. "
+                    "Search again only if the observations so far genuinely gave you nothing.\n"
+                )
+            )
             user_prompt = (
                 f"{context.as_prompt_block()}\n\n"
                 f"## Goal\n{goal}\n\n"
+                f"{budget_note}\n"
                 f"## Available tools\n{tool_docs}\n\n"
                 "Respond with EXACTLY one JSON object, nothing else:\n"
                 '{"thought": "<brief reasoning>", "tool": "<tool name or finish>", "args": {<tool arguments>}}'
@@ -173,19 +215,54 @@ class Agent:
                 tokens_out=result.tokens_out, latency_ms=result.latency_ms, success=True,
                 cost_usd=result.cost_usd,
             ))
-            self.context_manager.record_activity(
-                db, task_id=task_id, agent_name=self.config.name,
-                summary={"step": step, "tool": tool_name, "thought": action.get("thought", "")},
-            )
-            db.commit()
-
             if tool_name == "finish":
+                self.context_manager.record_activity(
+                    db, task_id=task_id, agent_name=self.config.name,
+                    summary={"step": step, "tool": "finish", "thought": action.get("thought", "")},
+                )
+                db.commit()
                 return args
 
+            # A bad tool choice or a broken tool is fed back as an observation
+            # rather than ending the run. Autonomy means routing around a dead
+            # dependency: one unconfigured optional tool (browserless, say)
+            # used to kill an otherwise fine scout run outright, and a
+            # scheduled system that dies on the first unavailable service
+            # spends most of its life dead.
             if tool_name not in self.config.tools:
-                raise ToolNotAllowedError(f"agent '{self.config.name}' is not permitted to call tool '{tool_name}'")
+                observation = (
+                    f"ERROR: '{tool_name}' is not a tool you may call. "
+                    f"Your tools are: {', '.join(self.config.tools)}. Pick one of those."
+                )
+            else:
+                try:
+                    observation = _summarise_observation(
+                        self._execute_tool(db, tool_name, args, agent_row=agent_row)
+                    )
+                except Exception as exc:
+                    # The tool may have died mid-transaction; the session has to
+                    # be usable for the next step and for record_activity.
+                    db.rollback()
+                    logger.warning("tool %s failed: %s", tool_name, exc)
+                    observation = f"ERROR from {tool_name}: {exc}. Try a different approach."
 
-            self._execute_tool(db, tool_name, args, agent_row=agent_row)
+            # The observation is the whole point of taking a step, and it used
+            # to be discarded: _execute_tool's return value was thrown away and
+            # only the tool NAME was recorded. So an agent searched Hacker
+            # News, never saw a single result, searched again, and burned every
+            # step without ever having anything to call create_opportunity
+            # with. 88 scout runs produced 0 opportunities that way — all
+            # "successful", because each step returned valid JSON.
+            self.context_manager.record_activity(
+                db, task_id=task_id, agent_name=self.config.name,
+                summary={
+                    "step": step,
+                    "tool": tool_name,
+                    "thought": action.get("thought", ""),
+                    "observation": observation,
+                },
+            )
+            db.commit()
 
         raise AgentExecutionError(f"agent '{self.config.name}' did not finish within {self.config.max_steps} steps")
 
