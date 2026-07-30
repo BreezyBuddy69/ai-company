@@ -138,7 +138,7 @@ def chat(body: ChatIn, db: Session = Depends(get_db)):
                 raise HTTPException(503, str(exc)) from exc
             break  # got at least one answer; a short fanout beats a 503
 
-        replies.append({"model": result.model_name, "content": result.content})
+        replies.append({"model": result.model_used, "content": result.content})
 
     db.commit()
     return {"replies": replies}

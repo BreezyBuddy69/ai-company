@@ -41,6 +41,9 @@
 <label for="url">Dashboard address</label>
 <input id="url" value="https://factory.halovisionai.cloud" />
 
+<label for="api">API address <span style="font-weight:400;color:#86868b">— leave blank if same as above</span></label>
+<input id="api" placeholder="e.g. http://localhost:8000 when running locally" />
+
 <label for="user">Username</label>
 <input id="user" value="anvil" />
 
@@ -55,13 +58,15 @@
   const $ = (id) => document.getElementById(id);
 
   async function save() {
-    const cfg = {
-      url: $("url").value.trim().replace(/\/$/, ""),
-      user: $("user").value.trim(),
-      password: $("password").value,
-    };
+    const url = $("url").value.trim().replace(/\/$/, "");
+    // Deployed behind Traefik the API is same-origin (/api on the dashboard
+    // host). Run locally it isn't — dashboard on :3000, API on :8000 — so the
+    // two addresses have to be separable, or setup rejects a working setup.
+    const apiUrl = ($("api").value.trim() || url).replace(/\/$/, "");
+    const cfg = { url, apiUrl, user: $("user").value.trim(), password: $("password").value };
+
     if (!cfg.url || !cfg.user || !cfg.password) {
-      $("msg").textContent = "Fill in all three fields.";
+      $("msg").textContent = "Fill in the address, username and password.";
       return;
     }
     $("save").disabled = true;
@@ -69,13 +74,13 @@
 
     // Verify before saving, so a typo surfaces here rather than as a blank
     // window later. /health is deliberately unauthenticated, so a 200 proves
-    // the address is right; the authenticated call proves the password is.
+    // the API address is right; the authenticated call proves the password is.
     try {
-      const health = await fetch(cfg.url + "/health");
-      if (!health.ok) throw new Error("no Anvil at that address (HTTP " + health.status + ")");
+      const health = await fetch(cfg.apiUrl + "/health");
+      if (!health.ok) throw new Error("no Anvil API at " + cfg.apiUrl + " (HTTP " + health.status + ")");
 
       const auth = "Basic " + btoa(cfg.user + ":" + cfg.password);
-      const q = await fetch(cfg.url + "/api/questions?status=open", { headers: { Authorization: auth } });
+      const q = await fetch(cfg.apiUrl + "/api/questions?status=open", { headers: { Authorization: auth } });
       if (q.status === 401) throw new Error("wrong username or password");
       if (!q.ok) throw new Error("server said HTTP " + q.status);
 

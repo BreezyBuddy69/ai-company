@@ -12,3 +12,6 @@ backups/
 
 # electron-builder output — 78MB installer, rebuilt by `npm run dist`
 desktop/release/
+
+# celery beat writes its schedule state next to the app at runtime
+backend/celerybeat-schedule*

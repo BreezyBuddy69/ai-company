@@ -59,3 +59,17 @@ def test_exclude_removes_models_from_the_candidate_pool(registry_path):
     # Excluding is not permanent — the shared router must be unchanged for the
     # next request (it is shared across threads).
     assert "model-a:free" in [m.name for m in r.candidates()]
+
+
+def test_chat_reads_a_field_that_actually_exists_on_completionresult():
+    """Regression: chat.py read `result.model_name`, which CompletionResult
+    has never had — the field is `model_used`. Every unit test passed, because
+    none of them touched a real result object; it only surfaced on the first
+    live call, as a 500. Pin the name."""
+    import dataclasses
+
+    from app.core.model_router import CompletionResult
+
+    fields = {f.name for f in dataclasses.fields(CompletionResult)}
+    assert "model_used" in fields
+    assert "model_name" not in fields

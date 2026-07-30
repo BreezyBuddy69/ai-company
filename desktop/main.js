@@ -111,8 +111,11 @@ function openDashboard() {
 async function pollQuestions() {
   const cfg = readConfig();
   if (!cfg) return;
+  // Falls back to `url` for configs written before the local setup (dashboard
+  // and API on different ports) needed them apart.
+  const api = (cfg.apiUrl || cfg.url).replace(/\/$/, "");
   try {
-    const res = await fetch(`${cfg.url.replace(/\/$/, "")}/api/questions?status=open`, {
+    const res = await fetch(`${api}/api/questions?status=open`, {
       headers: { Authorization: authHeader(cfg) },
     });
     if (!res.ok) return;
