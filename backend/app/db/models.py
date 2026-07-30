@@ -188,3 +188,31 @@ class FinanceTransaction(Base):
     amount_usd: Mapped[float] = mapped_column(Numeric(12, 2))
     description: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+
+
+class HumanQuestion(Base):
+    """An agent asking the operator something it cannot find out on its own —
+    an email address to use, a login, which of two options to take.
+
+    Deliberately not blocking: an agent posts a question and carries on. The
+    answer is picked up on a later run (core/tools.py ask_human). A Celery
+    task that slept until a human replied would hold a worker slot for hours.
+    """
+
+    __tablename__ = "human_questions"
+
+    id: Mapped[uuid.UUID] = _uuid_col()
+    agent: Mapped[str] = mapped_column(String)
+    question: Mapped[str] = mapped_column(String)
+    # Free-form "why I'm asking", shown under the question in the dashboard.
+    context: Mapped[str | None] = mapped_column(String)
+    # "text" | "secret". Secret answers are never returned by the list
+    # endpoint and never logged — see api/routes/questions.py.
+    kind: Mapped[str] = mapped_column(String, default="text")
+    # Dedupe handle: an agent re-asking the same thing every run would spam
+    # the inbox, so it passes a stable key and gets the existing row back.
+    ask_key: Mapped[str | None] = mapped_column(String, unique=True)
+    answer: Mapped[str | None] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, default="open")
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    answered_at: Mapped[datetime | None]

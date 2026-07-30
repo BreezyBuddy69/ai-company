@@ -150,3 +150,14 @@ export interface FamilySnapshot {
   variants: FamilyVariant[];
   min_runs_for_competition: number;
 }
+
+export interface HumanQuestion {
+  id: string;
+  agent: string;
+  question: string;
+  context: string | null;
+  kind: string;
+  status: string;
+  created_at: string;
+  answered_at: string | null;
+}

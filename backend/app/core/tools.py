@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.core.memory import write_memory
-from app.db.models import Agent, FinanceTransaction, Opportunity, Product
+from app.db.models import Agent, FinanceTransaction, HumanQuestion, Opportunity, Product
 
 HN_SEARCH_URL = "https://hn.algolia.com/api/v1/search"
 GITHUB_SEARCH_URL = "https://api.github.com/search/issues"
@@ -325,3 +325,41 @@ TOOL_DESCRIPTIONS = {
         "args": {"product_id": "uuid", "amount_usd": "float", "description": "string (optional)"},
     },
 }
+
+
+def ask_human(
+    db: Session,
+    *,
+    agent: str,
+    question: str,
+    context: str | None = None,
+    kind: str = "text",
+    ask_key: str | None = None,
+) -> dict[str, Any]:
+    """Ask the operator something the agent can't determine itself — which
+    email address to send from, a login for a service, which of two options
+    to take.
+
+    Non-blocking by design. Returns immediately with either the answer (if
+    this question was already answered on an earlier run) or status "open".
+    An agent should treat "open" as "I still don't know" and skip that branch
+    of work, not spin waiting: a Celery task sleeping until a human replies
+    holds a worker slot for hours and the beat schedule keeps queueing more.
+
+    Pass a stable `ask_key` for anything asked repeatedly, or an agent running
+    every 15 minutes files 96 identical questions a day.
+    """
+    if ask_key:
+        existing = db.scalar(select(HumanQuestion).where(HumanQuestion.ask_key == ask_key))
+        if existing:
+            return {
+                "status": existing.status,
+                "answer": existing.answer,
+                "question_id": str(existing.id),
+            }
+
+    q = HumanQuestion(agent=agent, question=question, context=context, kind=kind, ask_key=ask_key)
+    db.add(q)
+    db.commit()
+    db.refresh(q)
+    return {"status": "open", "answer": None, "question_id": str(q.id)}

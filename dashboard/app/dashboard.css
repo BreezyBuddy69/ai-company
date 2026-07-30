@@ -284,3 +284,19 @@
   color: var(--ink-muted);
   padding: 3px 0;
 }
+
+/* Answer field on /questions. Same hairline/radius vocabulary as .btn so the
+   two sit together in a row without looking bolted on. */
+.input {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--white);
+  font-family: inherit;
+}
+.input:focus {
+  outline: none;
+  border-color: var(--ink);
+}

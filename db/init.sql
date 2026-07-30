@@ -195,6 +195,22 @@ CREATE TABLE finance_transactions (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+
+CREATE TABLE human_questions (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent       TEXT NOT NULL,
+    question    TEXT NOT NULL,
+    context     TEXT,
+    kind        TEXT NOT NULL DEFAULT 'text' CHECK (kind IN ('text', 'secret')),
+    ask_key     TEXT UNIQUE,
+    answer      TEXT,
+    status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'answered', 'dismissed')),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    answered_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_human_questions_status ON human_questions(status, created_at DESC);
+
 -- ============================================================
 -- Seed: register the v1 agents (idempotent)
 -- ============================================================
